@@ -44,19 +44,19 @@ public struct AdminRouteConfiguration: Sendable {
 /// - `POST /admin/invitations/:id/delete` — delete unused invitation
 ///
 /// The `renderUsers` and `renderInvitations` closures receive view model
-/// arrays and should return a `Response` (typically HTML pages).
-public func installAdminRoutes<Context: AuthRequestContextProtocol>(
+/// arrays and should return a `ResponseGenerator` (typically `HTML` pages).
+public func installAdminRoutes<Context: AuthRequestContextProtocol, UsersPage: ResponseGenerator, InvitationsPage: ResponseGenerator>(
     on router: RouterGroup<AdminContext<Context>>,
     db: Database,
     logger: Logger,
     config: AdminRouteConfiguration,
-    renderUsers: @escaping @Sendable ([AdminUserViewModel], AdminContext<Context>) -> Response,
-    renderInvitations: @escaping @Sendable ([AdminInvitationViewModel], String, AdminContext<Context>) -> Response
+    renderUsers: @escaping @Sendable ([AdminUserViewModel], AdminContext<Context>) -> UsersPage,
+    renderInvitations: @escaping @Sendable ([AdminInvitationViewModel], String, AdminContext<Context>) -> InvitationsPage
 ) where Context.User: FluentAuthUser {
 
     // MARK: - User Management
 
-    router.get("/admin/users") { _, context -> Response in
+    router.get("/admin/users") { request, context -> Response in
         let users = try await Context.User.query(on: db).all()
             .sorted { ($0.createdAt ?? .distantPast) < ($1.createdAt ?? .distantPast) }
 
@@ -70,7 +70,7 @@ public func installAdminRoutes<Context: AuthRequestContextProtocol>(
             )
         }
 
-        return renderUsers(viewModels, context)
+        return try renderUsers(viewModels, context).response(from: request, context: context)
     }
 
     router.post("/admin/users/:id/role") { request, context -> Response in
@@ -139,7 +139,7 @@ public func installAdminRoutes<Context: AuthRequestContextProtocol>(
 
     // MARK: - Invitation Management
 
-    router.get("/admin/invitations") { _, context -> Response in
+    router.get("/admin/invitations") { request, context -> Response in
         let invitations = try await Invitation.query(on: db)
             .sort(\.$createdAt, .descending)
             .all()
@@ -155,7 +155,7 @@ public func installAdminRoutes<Context: AuthRequestContextProtocol>(
             )
         }
 
-        return renderInvitations(viewModels, config.baseURL, context)
+        return try renderInvitations(viewModels, config.baseURL, context).response(from: request, context: context)
     }
 
     router.post("/admin/invitations") { request, context -> Response in

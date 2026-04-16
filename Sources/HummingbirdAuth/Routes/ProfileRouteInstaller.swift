@@ -15,20 +15,20 @@ struct ProfileInput: Decodable {
 /// - `POST /profile` — update display name and email
 ///
 /// The `render` closure receives a `ProfileViewModel` and the request context,
-/// and should return a `Response` (typically an HTML page wrapping a `ProfileView`
-/// from HummingbirdAuthViews in your app's layout).
-public func installProfileRoutes<Context: AuthRequestContextProtocol>(
+/// and should return a `ResponseGenerator` (typically an `HTML` page wrapping
+/// a `ProfileView` from HummingbirdAuthViews in your app's layout).
+public func installProfileRoutes<Context: AuthRequestContextProtocol, Page: ResponseGenerator>(
     on router: RouterGroup<AuthenticatedContext<Context>>,
     db: Database,
-    render: @escaping @Sendable (ProfileViewModel, AuthenticatedContext<Context>) -> Response
+    render: @escaping @Sendable (ProfileViewModel, AuthenticatedContext<Context>) -> Page
 ) where Context.User: FluentAuthUser {
 
-    router.get("/profile") { _, context -> Response in
+    router.get("/profile") { request, context -> Response in
         let vm = ProfileViewModel(
             displayName: context.user.displayName,
             email: context.user.email
         )
-        return render(vm, context)
+        return try render(vm, context).response(from: request, context: context)
     }
 
     router.post("/profile") { request, context -> Response in
@@ -48,6 +48,6 @@ public func installProfileRoutes<Context: AuthRequestContextProtocol>(
             email: user.email,
             savedMessage: "Profile updated."
         )
-        return render(vm, context)
+        return try render(vm, context).response(from: request, context: context)
     }
 }
