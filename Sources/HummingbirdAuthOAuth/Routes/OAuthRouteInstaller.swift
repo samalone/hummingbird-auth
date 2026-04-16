@@ -16,11 +16,15 @@ import NIOCore
 /// The authorization endpoint (GET/POST /oauth/authorize) is NOT registered
 /// here because its consent UI is app-specific. Apps should implement their
 /// own consent page using `OAuthService.createAuthorizationCode()`.
+/// - Parameter requireAuthForRegistration: When `true` (the default), the
+///   `/oauth/register` endpoint requires an authenticated session (admin).
+///   Set to `false` only for fully open registration use cases.
 public func installOAuthRoutes<Context: OAuthRequestContextProtocol>(
     on router: Router<Context>,
     oauthService: OAuthService,
     logger: Logger,
-    pathPrefix: String = "/oauth"
+    pathPrefix: String = "/oauth",
+    requireAuthForRegistration: Bool = true
 ) where Context.User: FluentAuthUser {
     let config = oauthService.config
 
@@ -48,38 +52,16 @@ public func installOAuthRoutes<Context: OAuthRequestContextProtocol>(
     let oauth = router.group(RouterPath(pathPrefix))
 
     // Dynamic client registration (RFC 7591)
-    oauth.post("register") { request, context -> Response in
-        let bodyBuffer = try await request.body.collect(upTo: 1024 * 1024)
-        let body = try JSONDecoder().decode(ClientRegistrationRequest.self, from: bodyBuffer)
-
-        guard !body.client_name.trimmingCharacters(in: .whitespaces).isEmpty else {
-            throw HTTPError(.badRequest, message: "client_name is required")
+    // When requireAuthForRegistration is true, only admins can register clients.
+    if requireAuthForRegistration {
+        let adminOAuth = oauth.group(context: AdminContext<Context>.self)
+        adminOAuth.post("register") { request, context -> Response in
+            try await handleClientRegistration(request: request, oauthService: oauthService)
         }
-        guard !body.redirect_uris.isEmpty else {
-            throw HTTPError(.badRequest, message: "redirect_uris is required")
+    } else {
+        oauth.post("register") { request, context -> Response in
+            try await handleClientRegistration(request: request, oauthService: oauthService)
         }
-
-        let client = try await oauthService.registerClient(
-            name: body.client_name,
-            redirectURIs: body.redirect_uris,
-            grantTypes: body.grant_types,
-            scope: body.scope
-        )
-
-        let response = ClientRegistrationResponse(
-            client_id: client.clientID,
-            client_name: client.clientName,
-            redirect_uris: client.redirectURIList,
-            grant_types: client.grantTypeList,
-            scope: client.scope,
-            token_endpoint_auth_method: "none"
-        )
-        let data = try JSONEncoder().encode(response)
-        return Response(
-            status: .created,
-            headers: [.contentType: "application/json"],
-            body: .init(byteBuffer: ByteBuffer(data: data))
-        )
     }
 
     // Token endpoint
@@ -192,6 +174,43 @@ struct TokenResponse: Codable {
 struct OAuthErrorResponse: Codable {
     let error: String
     let error_description: String
+}
+
+private func handleClientRegistration(
+    request: Request,
+    oauthService: OAuthService
+) async throws -> Response {
+    let bodyBuffer = try await request.body.collect(upTo: 1024 * 1024)
+    let body = try JSONDecoder().decode(ClientRegistrationRequest.self, from: bodyBuffer)
+
+    guard !body.client_name.trimmingCharacters(in: .whitespaces).isEmpty else {
+        throw HTTPError(.badRequest, message: "client_name is required")
+    }
+    guard !body.redirect_uris.isEmpty else {
+        throw HTTPError(.badRequest, message: "redirect_uris is required")
+    }
+
+    let client = try await oauthService.registerClient(
+        name: body.client_name,
+        redirectURIs: body.redirect_uris,
+        grantTypes: body.grant_types,
+        scope: body.scope
+    )
+
+    let response = ClientRegistrationResponse(
+        client_id: client.clientID,
+        client_name: client.clientName,
+        redirect_uris: client.redirectURIList,
+        grant_types: client.grantTypeList,
+        scope: client.scope,
+        token_endpoint_auth_method: "none"
+    )
+    let data = try JSONEncoder().encode(response)
+    return Response(
+        status: .created,
+        headers: [.contentType: "application/json"],
+        body: .init(byteBuffer: ByteBuffer(data: data))
+    )
 }
 
 /// Parse a URL-encoded form body into a TokenRequest.

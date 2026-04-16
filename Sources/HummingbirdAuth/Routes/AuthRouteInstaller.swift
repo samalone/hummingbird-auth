@@ -43,7 +43,7 @@ public func installAuthRoutes<Context: AuthRequestContextProtocol>(
         let body = try JSONDecoder().decode(FinishLoginRequest.self, from: bodyBuffer)
 
         let challengeBytes = try decodeBase64URL(body.challengeBase64)
-        _ = try await passkeyService.verifyChallenge(challengeBytes)
+        _ = try await passkeyService.verifyChallenge(challengeBytes, type: .authentication)
 
         guard let credentialData = body.credentialJSON.data(using: .utf8) else {
             throw HTTPError(.badRequest, message: "Invalid credential data")
@@ -74,7 +74,7 @@ public func installAuthRoutes<Context: AuthRequestContextProtocol>(
         }
 
         // Create session.
-        let sessionToken = UUID().uuidString
+        let sessionToken = generateSecureToken()
         let session = AuthSession(
             userID: verifiedPasskey.userID,
             token: sessionToken,
@@ -138,7 +138,7 @@ public func installAuthRoutes<Context: AuthRequestContextProtocol>(
 
             let invitation = try await invitationService.validateToken(body.invitationToken)
             let challengeBytes = try decodeBase64URL(body.challengeBase64)
-            _ = try await passkeyService.verifyChallenge(challengeBytes)
+            _ = try await passkeyService.verifyChallenge(challengeBytes, type: .registration)
 
             guard let credentialData = body.credentialCreationDataJSON.data(using: .utf8) else {
                 throw HTTPError(.badRequest, message: "Invalid credential data")
@@ -178,7 +178,7 @@ public func installAuthRoutes<Context: AuthRequestContextProtocol>(
             try await config.callbacks.onUserRegistered?(user)
 
             // Create session.
-            let sessionToken = UUID().uuidString
+            let sessionToken = generateSecureToken()
             let session = AuthSession(
                 userID: userID,
                 token: sessionToken,

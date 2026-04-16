@@ -108,6 +108,22 @@ public struct OAuthService: Sendable {
         codeChallenge: String,
         codeChallengeMethod: String
     ) async throws -> OAuthAuthorizationCode {
+        // Validate redirect URI against client's registered URIs.
+        guard let client = try await OAuthClient.find(clientUUID, on: db) else {
+            throw OAuthError.invalidClient
+        }
+        guard client.redirectURIList.contains(redirectURI) else {
+            throw OAuthError.invalidRequest("redirect_uri is not registered for this client")
+        }
+
+        // Validate requested scopes are a subset of the client's registered scopes
+        // and the server's configured valid scopes.
+        let requestedScopes = Set(scope.split(separator: " ").map(String.init))
+        guard requestedScopes.isSubset(of: client.scopeSet),
+              requestedScopes.isSubset(of: config.validScopes) else {
+            throw OAuthError.invalidScope
+        }
+
         let code = generateSecureToken()
         let authCode = OAuthAuthorizationCode(
             code: code,
@@ -140,13 +156,19 @@ public struct OAuthService: Sendable {
 
         guard let authCode = try await OAuthAuthorizationCode.query(on: db)
             .filter(\.$code == code)
+            .filter(\.$consumedAt == nil)
             .first()
         else {
             throw OAuthError.invalidGrant
         }
 
+        // Atomically mark as consumed before any further validation.
+        // This prevents TOCTOU races where two concurrent requests both
+        // read the code as unconsumed.
+        authCode.consumedAt = Date()
+        try await authCode.save(on: db)
+
         guard !authCode.isExpired else { throw OAuthError.invalidGrant }
-        guard !authCode.isConsumed else { throw OAuthError.invalidGrant }
         guard authCode.clientUUID == client.id else { throw OAuthError.invalidGrant }
         guard authCode.redirectURI == redirectURI else { throw OAuthError.invalidGrant }
 
@@ -155,9 +177,6 @@ public struct OAuthService: Sendable {
             verifier: codeVerifier,
             method: authCode.codeChallengeMethod
         )
-
-        authCode.consumedAt = Date()
-        try await authCode.save(on: db)
 
         return try await createToken(
             clientUUID: client.id!,
@@ -190,13 +209,19 @@ public struct OAuthService: Sendable {
         guard !token.isRefreshExpired else { throw OAuthError.invalidGrant }
         guard token.clientUUID == client.id else { throw OAuthError.invalidGrant }
 
+        // Re-validate scopes against current client and server configuration.
+        let existingScopes = token.scopeSet
+        let validScopes = existingScopes.intersection(client.scopeSet).intersection(config.validScopes)
+        let refreshedScope = validScopes.sorted().joined(separator: " ")
+        guard !refreshedScope.isEmpty else { throw OAuthError.invalidScope }
+
         token.revokedAt = Date()
         try await token.save(on: db)
 
         return try await createToken(
             clientUUID: client.id!,
             userID: token.userID,
-            scope: token.scope
+            scope: refreshedScope
         )
     }
 

@@ -5,23 +5,23 @@ Work through these in priority order. Check off each item as fixed.
 
 ## Critical
 
-- [ ] **Session tokens use UUID instead of generateSecureToken()** — `AuthRouteInstaller.swift` lines 77, 181. `UUID().uuidString` has only 122 bits of entropy; `generateSecureToken()` (256 bits) already exists. Swap both occurrences.
+- [x] **Session tokens use UUID instead of generateSecureToken()** — `AuthRouteInstaller.swift` lines 77, 181. `UUID().uuidString` has only 122 bits of entropy; `generateSecureToken()` (256 bits) already exists. Swap both occurrences.
 
-- [ ] **No redirect URI validation in createAuthorizationCode** — `OAuthService.swift` lines 103-124. The method accepts any redirect URI without checking it against the client's registered `redirectURIList`. Add: `guard client.redirectURIList.contains(redirectURI)`.
+- [x] **No redirect URI validation in createAuthorizationCode** — `OAuthService.swift` lines 103-124. The method accepts any redirect URI without checking it against the client's registered `redirectURIList`. Add: `guard client.redirectURIList.contains(redirectURI)`.
 
 ## High
 
-- [ ] **Scope not validated at auth code creation** — `OAuthService.swift` lines 103-124. `createAuthorizationCode` stores scopes without checking they're a subset of the client's registered scopes or `config.validScopes`. Also, `refreshAccessToken` copies old scopes without re-validating.
+- [x] **Scope not validated at auth code creation** — `OAuthService.swift` lines 103-124. `createAuthorizationCode` stores scopes without checking they're a subset of the client's registered scopes or `config.validScopes`. Also, `refreshAccessToken` copies old scopes without re-validating.
 
-- [ ] **Challenge not bound to ceremony type** — `PasskeyService.swift` `verifyChallenge()` looks up by value only, ignoring the `type` field. A registration challenge could be used in an authentication flow. Add a `type` parameter and filter on it.
+- [x] **Challenge not bound to ceremony type** — `PasskeyService.swift` `verifyChallenge()` looks up by value only, ignoring the `type` field. A registration challenge could be used in an authentication flow. Add a `type` parameter and filter on it.
 
-- [ ] **Auth code replay via TOCTOU race** — `OAuthService.swift` lines 141-160. Two concurrent requests with the same code can both pass `!isConsumed` before either sets `consumedAt`. Use atomic conditional update: `UPDATE ... WHERE consumed_at IS NULL`.
+- [x] **Auth code replay via TOCTOU race** — `OAuthService.swift` lines 141-160. Two concurrent requests with the same code can both pass `!isConsumed` before either sets `consumedAt`. Use atomic conditional update: `UPDATE ... WHERE consumed_at IS NULL`.
 
-- [ ] **Unauthenticated client registration** — `OAuthRouteInstaller.swift` lines 51-83. `/oauth/register` has no auth, no rate limit. Anyone can register unlimited clients with arbitrary redirect URIs. Either require admin auth or document this as intentional for the use case.
+- [x] **Unauthenticated client registration** — `OAuthRouteInstaller.swift` lines 51-83. `/oauth/register` has no auth, no rate limit. Anyone can register unlimited clients with arbitrary redirect URIs. Either require admin auth or document this as intentional for the use case.
 
 ## Medium
 
-- [ ] **Invitation consumption race condition** — `InvitationService.swift` + `AuthRouteInstaller.swift`. Same TOCTOU pattern as auth code: two concurrent registrations can both consume the same invitation. Use atomic conditional update.
+- [x] **Invitation consumption race condition** — `InvitationService.swift` + `AuthRouteInstaller.swift`. Same TOCTOU pattern as auth code: two concurrent registrations can both consume the same invitation. Use atomic conditional update.
 
 - [ ] **Expired cookie missing security attributes** — `SessionMiddleware.swift` `expiredAuthSession()`. Missing `secure`, `httpOnly`, `sameSite` attributes that the set cookie has. Browser may treat them as different cookies, leaving the original intact.
 

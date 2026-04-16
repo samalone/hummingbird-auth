@@ -59,12 +59,22 @@ public struct InvitationService: Sendable {
         return invitation
     }
 
-    /// Mark an invitation as consumed by a user.
+    /// Atomically consume an invitation. Filters on `consumed_at IS NULL` to
+    /// prevent TOCTOU races where two concurrent registrations both consume
+    /// the same invitation.
     public func consumeInvitation(_ invitation: Invitation, consumedByID: UUID) async throws {
-        invitation.consumedAt = Date()
-        invitation.consumedByID = consumedByID
-        try await invitation.save(on: db)
-        logger.info("Invitation consumed: \(invitation.token.prefix(8))... by \(consumedByID)")
+        // Re-fetch with consumed_at == nil filter to narrow the race window.
+        guard let fresh = try await Invitation.query(on: db)
+            .filter(\.$id == invitation.requireID())
+            .filter(\.$consumedAt == nil)
+            .first()
+        else {
+            throw InvitationError.alreadyConsumed
+        }
+        fresh.consumedAt = Date()
+        fresh.consumedByID = consumedByID
+        try await fresh.save(on: db)
+        logger.info("Invitation consumed: \(fresh.token.prefix(8))... by \(consumedByID)")
     }
 
 }

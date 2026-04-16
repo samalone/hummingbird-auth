@@ -143,11 +143,12 @@ public struct PasskeyService: Sendable {
     // MARK: - Challenge Verification
 
     /// Verify a challenge is valid and not expired, then delete it.
-    public func verifyChallenge(_ challengeBytes: [UInt8]) async throws -> String {
+    public func verifyChallenge(_ challengeBytes: [UInt8], type: ChallengeType) async throws -> String {
         let challengeBase64 = encodeBase64URL(Data(challengeBytes))
 
         guard let stored = try await PasskeyChallenge.query(on: db)
             .filter(\.$challenge == challengeBase64)
+            .filter(\.$type == type)
             .first()
         else {
             throw PasskeyError.challengeNotFound
