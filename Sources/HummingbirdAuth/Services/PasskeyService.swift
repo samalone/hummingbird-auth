@@ -85,17 +85,10 @@ public struct PasskeyService: Sendable {
             }
         )
 
-        // credential.id is standard base64; convert to base64url to match
-        // what AuthenticationCredential.id.asString() returns during login.
-        let credentialIDBase64URL = credential.id
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
-
         let stored = PasskeyCredential(
             userID: userID,
             name: name,
-            credentialID: credentialIDBase64URL,
+            credentialID: normalizeToBase64URL(credential.id),
             publicKey: encodeBase64URL(Data(credential.publicKey)),
             signCount: Int64(credential.signCount),
             transports: nil,
@@ -183,12 +176,23 @@ public struct PasskeyService: Sendable {
 
 // MARK: - Base64URL Utilities
 
-/// Encode data to base64url (no padding).
-public func encodeBase64URL(_ data: Data) -> String {
-    data.base64EncodedString()
+/// Normalize any base64 string to base64url (no padding).
+///
+/// WebAuthn uses base64url throughout, but some libraries return standard
+/// base64 in certain code paths (e.g., swift-webauthn's `Credential.id`
+/// from `finishRegistration` is standard base64, while
+/// `AuthenticationCredential.id` is base64url). Always normalize before
+/// storing or comparing to avoid lookup mismatches.
+public func normalizeToBase64URL(_ value: String) -> String {
+    value
         .replacingOccurrences(of: "+", with: "-")
         .replacingOccurrences(of: "/", with: "_")
         .replacingOccurrences(of: "=", with: "")
+}
+
+/// Encode data to base64url (no padding).
+public func encodeBase64URL(_ data: Data) -> String {
+    normalizeToBase64URL(data.base64EncodedString())
 }
 
 /// Decode a base64url string to bytes.

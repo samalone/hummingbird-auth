@@ -2,8 +2,15 @@ import HTTPTypes
 import Hummingbird
 
 /// Catches 401 errors on HTML requests and redirects to the login page.
-/// Passes through 401 unchanged for API requests (JSON Accept or Content-Type,
-/// or HTMX requests).
+/// Passes through 401 unchanged for API requests.
+///
+/// A request is classified as an API call (and gets the raw 401) if any of:
+/// - `Accept` header contains `application/json`
+/// - `Content-Type` header contains `application/json`
+/// - `HX-Request` header is present (HTMX partial request)
+///
+/// This matters for WebAuthn ceremonies where `fetch()` sends JSON
+/// with `Content-Type: application/json` but no `Accept` header.
 public struct AuthRedirectMiddleware<Context: RequestContext>: RouterMiddleware {
     private let loginPath: String
 
