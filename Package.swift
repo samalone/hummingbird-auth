@@ -22,7 +22,7 @@ let package = Package(
         .package(url: "https://github.com/vapor/fluent-sqlite-driver.git", from: "4.0.0"),
     ],
     targets: [
-        // Layer 1: Protocols and configuration — no Fluent dependency
+        // Layer 1: Protocols, configuration, and view models — no Fluent dependency
         .target(
             name: "HummingbirdAuthCore",
             dependencies: [

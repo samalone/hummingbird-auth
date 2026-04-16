@@ -1,3 +1,6 @@
+// View models shared between the Auth (route installers create them)
+// and Views (Plot components consume them) targets.
+
 import Foundation
 
 /// View model for the profile page.
