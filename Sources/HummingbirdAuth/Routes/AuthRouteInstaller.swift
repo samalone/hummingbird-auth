@@ -95,12 +95,7 @@ public func installAuthRoutes<Context: AuthRequestContextProtocol>(
             headers: [.contentType: "application/json"],
             body: .init(byteBuffer: ByteBuffer(data: jsonData))
         )
-        response.setCookie(.authSession(
-            token: sessionToken,
-            maxAge: Int(config.session.sessionTTL),
-            secure: config.session.secureCookie,
-            cookieName: config.session.cookieName
-        ))
+        response.setCookie(.authSession(token: sessionToken, config: config.session))
 
         logger.info("User \(verifiedPasskey.userID) authenticated via passkey")
         return response
@@ -223,7 +218,7 @@ public func installAuthRoutes<Context: AuthRequestContextProtocol>(
             .delete()
 
         var response = Response.redirect(to: config.callbacks.postLogoutRedirect, type: .normal)
-        response.setCookie(.expiredAuthSession(cookieName: config.session.cookieName))
+        response.setCookie(.expiredAuthSession(config: config.session))
 
         logger.info("User \(userID) logged out")
         return response

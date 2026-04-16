@@ -26,7 +26,7 @@ where Context.User: FluentAuthUser {
     ) async throws -> Response {
         var context = context
 
-        if let token = request.cookies[config.cookieName]?.value {
+        if let token = request.cookies[SessionConfiguration.cookieName]?.value {
             if let session = try await AuthSession.query(on: db)
                 .filter(\.$token == token)
                 .filter(\.$expiresAt > Date())
@@ -62,28 +62,26 @@ extension Cookie {
     /// Create a session cookie with SameSite=Lax.
     public static func authSession(
         token: String,
-        maxAge: Int = 30 * 86400,
-        secure: Bool = true,
-        cookieName: String = "session"
+        config: SessionConfiguration
     ) -> Cookie {
         Cookie(
-            name: cookieName,
+            name: SessionConfiguration.cookieName,
             value: token,
-            maxAge: maxAge,
-            path: "/",
-            secure: secure,
+            maxAge: Int(config.sessionTTL),
+            path: config.cookiePath,
+            secure: config.secureCookie,
             httpOnly: true,
             sameSite: .lax
         )
     }
 
     /// Create an expired session cookie (for logout).
-    public static func expiredAuthSession(cookieName: String = "session") -> Cookie {
+    public static func expiredAuthSession(config: SessionConfiguration) -> Cookie {
         Cookie(
-            name: cookieName,
+            name: SessionConfiguration.cookieName,
             value: "deleted",
             maxAge: 0,
-            path: "/"
+            path: config.cookiePath
         )
     }
 }

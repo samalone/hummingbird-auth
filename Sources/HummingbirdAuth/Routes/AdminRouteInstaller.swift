@@ -15,18 +15,14 @@ struct InviteInput: Decodable {
 public struct AdminRouteConfiguration: Sendable {
     /// Base URL for generating invitation links (e.g., "http://localhost:8080").
     public var baseURL: String
-    /// Session cookie name (must match SessionConfiguration.cookieName).
-    public var cookieName: String
     /// Invitation configuration for creating new invitations.
     public var invitations: InvitationConfiguration
 
     public init(
         baseURL: String = "http://localhost:8080",
-        cookieName: String = "session",
         invitations: InvitationConfiguration = .init()
     ) {
         self.baseURL = baseURL
-        self.cookieName = cookieName
         self.invitations = invitations
     }
 }
@@ -105,7 +101,7 @@ public func installAdminRoutes<Context: AuthRequestContextProtocol, UsersPage: R
 
         let adminID = context.realUserID ?? context.user.id!
 
-        guard let token = request.cookies[config.cookieName]?.value,
+        guard let token = request.cookies[SessionConfiguration.cookieName]?.value,
               let session = try await AuthSession.query(on: db)
                 .filter(\.$token == token)
                 .first()
@@ -121,7 +117,7 @@ public func installAdminRoutes<Context: AuthRequestContextProtocol, UsersPage: R
     }
 
     router.post("/admin/masquerade/end") { request, context -> Response in
-        guard let token = request.cookies[config.cookieName]?.value,
+        guard let token = request.cookies[SessionConfiguration.cookieName]?.value,
               let session = try await AuthSession.query(on: db)
                 .filter(\.$token == token)
                 .first(),

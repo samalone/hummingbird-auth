@@ -63,17 +63,33 @@ public struct PasskeyConfiguration: Sendable {
 }
 
 /// Session cookie and TTL configuration.
+///
+/// The cookie name is fixed as `hb-auth` to avoid synchronization issues
+/// between middleware and route handlers. Cookie path scoping separates
+/// sessions when multiple apps share a domain with path-based routing.
 public struct SessionConfiguration: Sendable {
-    public var cookieName: String
+    /// Fixed cookie name used by the library.
+    public static let cookieName = "hb-auth"
+
+    /// Cookie path — scope the session cookie to this path prefix.
+    ///
+    /// Set this to your app's ingress path when running multiple apps
+    /// behind the same domain (e.g., "/prospero"). Defaults to "/" which
+    /// sends the cookie on all requests to the domain.
+    public var cookiePath: String
+
+    /// Session TTL in seconds. Default: 30 days.
     public var sessionTTL: TimeInterval
+
+    /// Whether to set the Secure flag on the cookie. Default: true.
     public var secureCookie: Bool
 
     public init(
-        cookieName: String = "session",
+        cookiePath: String = "/",
         sessionTTL: TimeInterval = 86400 * 30,
         secureCookie: Bool = true
     ) {
-        self.cookieName = cookieName
+        self.cookiePath = cookiePath
         self.sessionTTL = sessionTTL
         self.secureCookie = secureCookie
     }
