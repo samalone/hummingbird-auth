@@ -85,10 +85,17 @@ public struct PasskeyService: Sendable {
             }
         )
 
+        // credential.id is standard base64; convert to base64url to match
+        // what AuthenticationCredential.id.asString() returns during login.
+        let credentialIDBase64URL = credential.id
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+
         let stored = PasskeyCredential(
             userID: userID,
             name: name,
-            credentialID: credential.id,
+            credentialID: credentialIDBase64URL,
             publicKey: encodeBase64URL(Data(credential.publicKey)),
             signCount: Int64(credential.signCount),
             transports: nil,
