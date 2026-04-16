@@ -180,7 +180,12 @@ public func installAuthRoutes<Context: AuthRequestContextProtocol>(
                 try await existing.save(on: db)
                 user = existing
             } else {
-                let newUser = Context.User(displayName: registrationDisplayName, email: registrationEmail)
+                var newUser = Context.User(displayName: registrationDisplayName, email: registrationEmail)
+                // Auto-promote the first registered user to admin.
+                let userCount = try await Context.User.query(on: db).count()
+                if userCount == 0 {
+                    newUser.isAdmin = true
+                }
                 try await newUser.save(on: db)
                 user = newUser
             }
