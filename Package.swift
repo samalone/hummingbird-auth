@@ -11,6 +11,7 @@ let package = Package(
         .library(name: "HummingbirdAuthCore", targets: ["HummingbirdAuthCore"]),
         .library(name: "HummingbirdAuth", targets: ["HummingbirdAuth"]),
         .library(name: "HummingbirdAuthViews", targets: ["HummingbirdAuthViews"]),
+        .library(name: "HummingbirdAuthOAuth", targets: ["HummingbirdAuthOAuth"]),
     ],
     dependencies: [
         .package(url: "https://github.com/hummingbird-project/hummingbird.git", from: "2.0.0"),
@@ -47,6 +48,16 @@ let package = Package(
                 "HummingbirdAuthCore",
                 .product(name: "Plot", package: "Plot"),
                 .product(name: "PlotHTMX", package: "plot-htmx"),
+            ]
+        ),
+
+        // Layer 4: OAuth 2.1 authorization server
+        .target(
+            name: "HummingbirdAuthOAuth",
+            dependencies: [
+                "HummingbirdAuth",
+                .product(name: "Hummingbird", package: "hummingbird"),
+                .product(name: "HummingbirdFluent", package: "hummingbird-fluent"),
             ]
         ),
 

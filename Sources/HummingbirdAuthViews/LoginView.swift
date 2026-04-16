@@ -52,6 +52,6 @@ public struct LoginView: Component {
             .class("auth-button primary")
         }
         .class("auth-login-view")
-        .data(named: "auth-prefix", value: pathPrefix)
+        .attribute(named: "data-auth-prefix", value: pathPrefix)
     }
 }

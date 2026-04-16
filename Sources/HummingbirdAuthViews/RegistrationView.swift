@@ -92,6 +92,6 @@ public struct RegistrationView: Component {
             .attribute(named: "id", value: "auth-registration-form")
         }
         .class("auth-registration-view")
-        .data(named: "auth-prefix", value: pathPrefix)
+        .attribute(named: "data-auth-prefix", value: pathPrefix)
     }
 }
