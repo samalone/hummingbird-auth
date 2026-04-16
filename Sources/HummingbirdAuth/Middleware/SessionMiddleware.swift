@@ -4,10 +4,11 @@ import Hummingbird
 import HummingbirdAuthCore
 
 /// Reads the session cookie, loads the session and user, and populates
-/// the request context.
+/// the request context including masquerade state.
 ///
-/// The `Context.User` type must conform to both `AuthUser` and Fluent's `Model`
-/// so that sessions can look up users by UUID.
+/// During masquerade, `context.user` is set to the *target* user,
+/// `context.masqueradingAs` is the target's display name, and
+/// `context.realUserID` is the admin's ID.
 public struct SessionMiddleware<Context: AuthRequestContextProtocol>: RouterMiddleware
 where Context.User: FluentAuthUser {
     private let db: Database
@@ -34,8 +35,15 @@ where Context.User: FluentAuthUser {
                 let effectiveUserID = session.masqueradeUserID ?? session.userID
                 if let user = try await Context.User.find(effectiveUserID, on: db) {
                     context.user = user
+
+                    // Populate masquerade state.
+                    if session.masqueradeUserID != nil, let realID = session.realUserID {
+                        context.masqueradingAs = user.displayName
+                        context.realUserID = realID
+                    }
                 }
 
+                // Consume flash messages (one-time display).
                 let flashes = session.consumeFlashMessages()
                 if !flashes.isEmpty {
                     context.flashMessages = flashes

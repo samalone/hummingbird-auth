@@ -12,6 +12,8 @@ import Foundation
 ///     @ID(key: .id) var id: UUID?
 ///     @Field(key: "display_name") var displayName: String
 ///     @Field(key: "email") var email: String
+///     @Field(key: "is_admin") var isAdmin: Bool
+///     @Timestamp(key: "created_at", on: .create) var createdAt: Date?
 ///     init() {}
 ///     required init(displayName: String, email: String) { ... }
 /// }
@@ -23,13 +25,21 @@ public protocol AuthUser: Sendable {
     var displayName: String { get set }
     var email: String { get set }
 
-    /// Whether this user has admin privileges.
-    var isAdmin: Bool { get }
+    /// Whether this user has admin privileges. Settable for admin role management.
+    var isAdmin: Bool { get set }
+
+    /// Creation timestamp. Used by admin user list for sorting.
+    var createdAt: Date? { get }
 
     /// Create a new user during registration.
     init(displayName: String, email: String)
 }
 
 extension AuthUser {
-    public var isAdmin: Bool { false }
+    public var isAdmin: Bool {
+        get { false }
+        set { }  // No-op for apps that don't support admin roles
+    }
+
+    public var createdAt: Date? { nil }
 }
