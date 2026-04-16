@@ -196,12 +196,7 @@ public func installAuthRoutes<Context: AuthRequestContextProtocol>(
                 headers: [.contentType: "application/json"],
                 body: .init(byteBuffer: ByteBuffer(data: jsonData))
             )
-            response.setCookie(.authSession(
-                token: sessionToken,
-                maxAge: Int(config.session.sessionTTL),
-                secure: config.session.secureCookie,
-                cookieName: config.session.cookieName
-            ))
+            response.setCookie(.authSession(token: sessionToken, config: config.session))
 
             logger.info("New user registered: \(body.email) (\(userID))")
             return response
