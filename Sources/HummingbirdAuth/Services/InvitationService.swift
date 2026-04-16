@@ -24,7 +24,7 @@ public struct InvitationService: Sendable {
     /// Create a new invitation token.
     public func createInvitation(
         email: String? = nil,
-        invitedByID: UUID,
+        invitedByID: UUID? = nil,
         expiresIn: TimeInterval? = nil
     ) async throws -> Invitation {
         let token = generateToken()
