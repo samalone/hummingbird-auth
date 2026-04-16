@@ -8,11 +8,13 @@ public struct ProfileViewModel: Sendable {
     public var displayName: String
     public var email: String
     public var savedMessage: String?
+    public var csrfToken: String?
 
-    public init(displayName: String, email: String, savedMessage: String? = nil) {
+    public init(displayName: String, email: String, savedMessage: String? = nil, csrfToken: String? = nil) {
         self.displayName = displayName
         self.email = email
         self.savedMessage = savedMessage
+        self.csrfToken = csrfToken
     }
 }
 

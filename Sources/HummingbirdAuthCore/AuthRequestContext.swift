@@ -31,6 +31,9 @@ public protocol AuthRequestContextProtocol: RequestContext {
 
     /// The real admin user's ID during masquerade. Nil when not masquerading.
     var realUserID: UUID? { get set }
+
+    /// CSRF token from the current session, for embedding in forms.
+    var csrfToken: String? { get set }
 }
 
 /// Child context for routes requiring an authenticated user.
@@ -42,6 +45,7 @@ public struct AuthenticatedContext<Parent: AuthRequestContextProtocol>: ChildReq
     public let flashMessages: [FlashMessage]
     public let masqueradingAs: String?
     public let realUserID: UUID?
+    public let csrfToken: String?
 
     public init(context: Parent) throws {
         guard let user = context.user else {
@@ -52,6 +56,7 @@ public struct AuthenticatedContext<Parent: AuthRequestContextProtocol>: ChildReq
         self.flashMessages = context.flashMessages
         self.masqueradingAs = context.masqueradingAs
         self.realUserID = context.realUserID
+        self.csrfToken = context.csrfToken
     }
 }
 
@@ -68,6 +73,7 @@ public struct AdminContext<Parent: AuthRequestContextProtocol>: ChildRequestCont
     public let flashMessages: [FlashMessage]
     public let masqueradingAs: String?
     public let realUserID: UUID?
+    public let csrfToken: String?
 
     public init(context: Parent) throws {
         guard let user = context.user else {
@@ -83,5 +89,6 @@ public struct AdminContext<Parent: AuthRequestContextProtocol>: ChildRequestCont
         self.flashMessages = context.flashMessages
         self.masqueradingAs = context.masqueradingAs
         self.realUserID = context.realUserID
+        self.csrfToken = context.csrfToken
     }
 }

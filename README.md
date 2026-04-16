@@ -59,6 +59,7 @@ struct AppContext: AuthRequestContextProtocol, RequestContext {
     var flashMessages: [FlashMessage] = []
     var masqueradingAs: String?
     var realUserID: UUID?
+    var csrfToken: String?
 
     init(source: ApplicationRequestContextSource) {
         self.coreContext = .init(source: source)
@@ -157,14 +158,36 @@ installAdminRoutes(
     on: admin, db: db, logger: logger,
     config: AdminRouteConfiguration(baseURL: "https://example.com"),
     renderUsers: { users, ctx in
-        MyPageLayout(title: "Users") { AdminUsersView(users: users) }
+        MyPageLayout(title: "Users") {
+            AdminUsersView(users: users, csrfToken: ctx.csrfToken)
+        }
     },
     renderInvitations: { invitations, baseURL, ctx in
         MyPageLayout(title: "Invitations") {
-            AdminInvitationsView(invitations: invitations, baseURL: baseURL)
+            AdminInvitationsView(invitations: invitations, baseURL: baseURL,
+                                 csrfToken: ctx.csrfToken)
         }
     }
 )
+```
+
+## CSRF Protection
+
+All form POST endpoints (profile update, admin role changes, masquerade, invitation management) validate a per-session CSRF token. Pass `csrfToken` from the context to the view components so they can include it as a hidden form field:
+
+```swift
+ProfileView(viewModel: vm)                  // csrfToken is in the view model
+AdminUsersView(users: users, csrfToken: ctx.csrfToken)
+AdminInvitationsView(invitations: invs, baseURL: url, csrfToken: ctx.csrfToken)
+```
+
+If your app renders its own "end masquerade" button, include the token as a hidden field:
+
+```html
+<form method="POST" action="/admin/masquerade/end">
+    <input type="hidden" name="csrf_token" value="{{csrfToken}}">
+    <button type="submit">End Masquerade</button>
+</form>
 ```
 
 ## Cookie Path Scoping

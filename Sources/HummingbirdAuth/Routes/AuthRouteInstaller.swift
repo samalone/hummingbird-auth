@@ -43,7 +43,7 @@ public func installAuthRoutes<Context: AuthRequestContextProtocol>(
         let body = try JSONDecoder().decode(FinishLoginRequest.self, from: bodyBuffer)
 
         let challengeBytes = try decodeBase64URL(body.challengeBase64)
-        _ = try await passkeyService.verifyChallenge(challengeBytes, type: .authentication)
+        let _ = try await passkeyService.verifyChallenge(challengeBytes, type: .authentication)
 
         guard let credentialData = body.credentialJSON.data(using: .utf8) else {
             throw HTTPError(.badRequest, message: "Invalid credential data")
@@ -114,13 +114,22 @@ public func installAuthRoutes<Context: AuthRequestContextProtocol>(
                 BeginRegistrationRequest.self, from: bodyBuffer
             )
 
-            _ = try await invitationService.validateToken(body.invitationToken)
+            let invitation = try await invitationService.validateToken(body.invitationToken)
+
+            // Enforce invitation email constraint: if the invitation was
+            // created for a specific email, only that email may register.
+            if let invEmail = invitation.email {
+                guard invEmail.lowercased() == body.email.lowercased() else {
+                    throw HTTPError(.forbidden, message: "This invitation is for a different email address")
+                }
+            }
 
             let tempUserID = UUID()
             let options = try await passkeyService.beginRegistration(
                 userID: tempUserID,
                 username: body.email,
-                displayName: body.displayName
+                displayName: body.displayName,
+                invitationToken: body.invitationToken
             )
 
             let challengeBase64 = encodeBase64URL(Data(options.challenge))
@@ -136,9 +145,20 @@ public func installAuthRoutes<Context: AuthRequestContextProtocol>(
                 FinishRegistrationRequest.self, from: bodyBuffer
             )
 
-            let invitation = try await invitationService.validateToken(body.invitationToken)
             let challengeBytes = try decodeBase64URL(body.challengeBase64)
-            _ = try await passkeyService.verifyChallenge(challengeBytes, type: .registration)
+            let challenge = try await passkeyService.verifyChallenge(challengeBytes, type: .registration)
+
+            // Use the email, displayName, and invitation token that were
+            // bound to the challenge at begin-registration, not the values
+            // from the client. This prevents an attacker from swapping the
+            // email between begin and finish to take over another account.
+            guard let registrationEmail = challenge.registrationEmail,
+                  let registrationDisplayName = challenge.registrationDisplayName,
+                  let registrationInvitationToken = challenge.registrationInvitationToken else {
+                throw HTTPError(.badRequest, message: "Challenge is not bound to a registration")
+            }
+
+            let invitation = try await invitationService.validateToken(registrationInvitationToken)
 
             guard let credentialData = body.credentialCreationDataJSON.data(using: .utf8) else {
                 throw HTTPError(.badRequest, message: "Invalid credential data")
@@ -149,18 +169,18 @@ public func installAuthRoutes<Context: AuthRequestContextProtocol>(
 
             // Create or reclaim user.
             let user: Context.User
-            if var existing = try await Context.User.findByEmail(body.email, on: db) {
+            if var existing = try await Context.User.findByEmail(registrationEmail, on: db) {
                 let credentialCount = try await PasskeyCredential.query(on: db)
                     .filter(\.$userID == existing.requireID())
                     .count()
                 if credentialCount > 0 {
                     throw HTTPError(.conflict, message: "A user with this email already exists")
                 }
-                existing.displayName = body.displayName
+                existing.displayName = registrationDisplayName
                 try await existing.save(on: db)
                 user = existing
             } else {
-                let newUser = Context.User(displayName: body.displayName, email: body.email)
+                let newUser = Context.User(displayName: registrationDisplayName, email: registrationEmail)
                 try await newUser.save(on: db)
                 user = newUser
             }
@@ -196,7 +216,7 @@ public func installAuthRoutes<Context: AuthRequestContextProtocol>(
             )
             response.setCookie(.authSession(token: sessionToken, config: config.session))
 
-            logger.info("New user registered: \(body.email) (\(userID))")
+            logger.info("New user registered: \(registrationEmail) (\(userID))")
             return response
         }
     }
@@ -204,11 +224,15 @@ public func installAuthRoutes<Context: AuthRequestContextProtocol>(
     // MARK: - Logout
 
     let authed = router.group(context: AuthenticatedContext<Context>.self)
-    authed.post(RouterPath("\(config.pathPrefix)/logout")) { _, context -> Response in
+    authed.post(RouterPath("\(config.pathPrefix)/logout")) { request, context -> Response in
         let userID = context.user.id!
-        try await AuthSession.query(on: db)
-            .filter(\.$userID == userID)
-            .delete()
+
+        // Delete only the current session (not all sessions for this user).
+        if let token = request.cookies[SessionConfiguration.cookieName]?.value {
+            try await AuthSession.query(on: db)
+                .filter(\.$token == token)
+                .delete()
+        }
 
         var response = Response.redirect(to: config.callbacks.postLogoutRedirect, type: .normal)
         response.setCookie(.expiredAuthSession(config: config.session))
@@ -248,9 +272,6 @@ struct BeginRegistrationResponse: Codable, ResponseEncodable {
 }
 
 struct FinishRegistrationRequest: Codable {
-    let displayName: String
-    let email: String
-    let invitationToken: String
     let challengeBase64: String
     let credentialCreationDataJSON: String
 }

@@ -40,7 +40,8 @@ public struct PasskeyService: Sendable {
     public func beginRegistration(
         userID: UUID,
         username: String,
-        displayName: String
+        displayName: String,
+        invitationToken: String? = nil
     ) async throws -> PublicKeyCredentialCreationOptions {
 
         let options = webAuthn.beginRegistration(
@@ -54,12 +55,15 @@ public struct PasskeyService: Sendable {
             ]
         )
 
-        // Store the challenge for verification.
+        // Store the challenge with registration context bound to it.
         let challengeBase64 = encodeBase64URL(Data(options.challenge))
         let challenge = PasskeyChallenge(
             challenge: challengeBase64,
             type: .registration,
-            expiresAt: Date().addingTimeInterval(challengeTTL)
+            expiresAt: Date().addingTimeInterval(challengeTTL),
+            registrationEmail: username,
+            registrationDisplayName: displayName,
+            registrationInvitationToken: invitationToken
         )
         try await challenge.save(on: db)
 
@@ -143,7 +147,8 @@ public struct PasskeyService: Sendable {
     // MARK: - Challenge Verification
 
     /// Verify a challenge is valid and not expired, then delete it.
-    public func verifyChallenge(_ challengeBytes: [UInt8], type: ChallengeType) async throws -> String {
+    /// Returns the challenge record so callers can read bound registration context.
+    public func verifyChallenge(_ challengeBytes: [UInt8], type: ChallengeType) async throws -> PasskeyChallenge {
         let challengeBase64 = encodeBase64URL(Data(challengeBytes))
 
         guard let stored = try await PasskeyChallenge.query(on: db)
@@ -160,7 +165,7 @@ public struct PasskeyService: Sendable {
         }
 
         try await stored.delete(on: db)
-        return challengeBase64
+        return stored
     }
 
     // MARK: - Credential Management

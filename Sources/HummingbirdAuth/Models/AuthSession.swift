@@ -26,6 +26,9 @@ public final class AuthSession: Model, @unchecked Sendable {
     @OptionalField(key: "real_user_id")
     public var realUserID: UUID?
 
+    @Field(key: "csrf_token")
+    public var csrfToken: String
+
     @Timestamp(key: "created_at", on: .create)
     public var createdAt: Date?
 
@@ -35,6 +38,7 @@ public final class AuthSession: Model, @unchecked Sendable {
         self.userID = userID
         self.token = token
         self.expiresAt = expiresAt
+        self.csrfToken = generateSecureToken()
     }
 
     public var isExpired: Bool {

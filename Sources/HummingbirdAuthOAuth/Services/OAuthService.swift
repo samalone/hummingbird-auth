@@ -80,6 +80,11 @@ public struct OAuthService: Sendable {
         grantTypes: [String]?,
         scope: String?
     ) async throws -> OAuthClient {
+        // Validate redirect URIs per OAuth 2.1 requirements.
+        for uri in redirectURIs {
+            try validateRedirectURI(uri)
+        }
+
         let clientID = generateSecureToken()
         let resolvedGrantTypes = grantTypes ?? ["authorization_code"]
         let resolvedScope = scope.map { requested in
@@ -279,6 +284,31 @@ public struct OAuthService: Sendable {
     }
 
     // MARK: - Helpers
+
+    /// Validate a redirect URI per OAuth 2.1 requirements:
+    /// - Must be an absolute HTTP(S) URL
+    /// - Must use https:// (http:// allowed only for localhost/127.0.0.1)
+    /// - Must not contain a fragment (#)
+    private func validateRedirectURI(_ uri: String) throws {
+        guard let url = URL(string: uri),
+              let scheme = url.scheme?.lowercased(),
+              let host = url.host?.lowercased() else {
+            throw OAuthError.invalidRequest("redirect_uri must be an absolute URL")
+        }
+
+        guard scheme == "https" || scheme == "http" else {
+            throw OAuthError.invalidRequest("redirect_uri must use http or https scheme")
+        }
+
+        let isLocalhost = host == "localhost" || host == "127.0.0.1" || host == "::1"
+        if scheme == "http" && !isLocalhost {
+            throw OAuthError.invalidRequest("redirect_uri must use https (http allowed only for localhost)")
+        }
+
+        if uri.contains("#") {
+            throw OAuthError.invalidRequest("redirect_uri must not contain a fragment")
+        }
+    }
 
     private func createToken(clientUUID: UUID, userID: UUID, scope: String) async throws -> OAuthToken {
         let token = OAuthToken(

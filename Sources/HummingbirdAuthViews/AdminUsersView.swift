@@ -8,9 +8,11 @@ import PlotHTMX
 /// Renders a table of users with role management and masquerade buttons.
 public struct AdminUsersView: Component {
     public var users: [AdminUserViewModel]
+    public var csrfToken: String?
 
-    public init(users: [AdminUserViewModel]) {
+    public init(users: [AdminUserViewModel], csrfToken: String? = nil) {
         self.users = users
+        self.csrfToken = csrfToken
     }
 
     private static let dateFormatter: DateFormatter = {
@@ -48,6 +50,8 @@ public struct AdminUsersView: Component {
                             Element(name: "td") {
                                 Div {
                                     Element(name: "form") {
+                                        Node.input(.type(.hidden), .name("csrf_token"),
+                                                   .value(csrfToken ?? ""))
                                         Node.input(.type(.hidden), .name("role"),
                                                    .value(user.isAdmin ? "user" : "admin"))
                                         Element(name: "button") {
@@ -60,6 +64,8 @@ public struct AdminUsersView: Component {
                                     .attribute(named: "action", value: "/admin/users/\(user.id)/role")
 
                                     Element(name: "form") {
+                                        Node.input(.type(.hidden), .name("csrf_token"),
+                                                   .value(csrfToken ?? ""))
                                         Element(name: "button") { Text("Masquerade") }
                                             .type("submit")
                                             .class("button small secondary")

@@ -204,9 +204,6 @@ public enum WebAuthnScript {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        displayName: displayName,
-                        email: email,
-                        invitationToken: invitationToken,
                         challengeBase64: challengeBase64,
                         credentialCreationDataJSON: credentialCreationDataJSON
                     })

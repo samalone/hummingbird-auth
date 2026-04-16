@@ -35,6 +35,7 @@ where Context.User: FluentAuthUser {
                 let effectiveUserID = session.masqueradeUserID ?? session.userID
                 if let user = try await Context.User.find(effectiveUserID, on: db) {
                     context.user = user
+                    context.csrfToken = session.csrfToken
 
                     // Populate masquerade state.
                     if session.masqueradeUserID != nil, let realID = session.realUserID {

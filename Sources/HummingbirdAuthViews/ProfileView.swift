@@ -19,6 +19,8 @@ public struct ProfileView: Component {
             }
 
             Element(name: "form") {
+                Node.input(.type(.hidden), .name("csrf_token"),
+                           .value(viewModel.csrfToken ?? ""))
                 Div {
                     Element(name: "label") { Text("Display Name") }
                         .attribute(named: "for", value: "display_name")

@@ -7,6 +7,7 @@ import Logging
 struct ProfileInput: Decodable {
     var display_name: String
     var email: String
+    var csrf_token: String
 }
 
 /// Install profile routes.
@@ -26,7 +27,8 @@ public func installProfileRoutes<Context: AuthRequestContextProtocol, Page: Resp
     router.get("/profile") { request, context -> Response in
         let vm = ProfileViewModel(
             displayName: context.user.displayName,
-            email: context.user.email
+            email: context.user.email,
+            csrfToken: context.csrfToken
         )
         return try render(vm, context).response(from: request, context: context)
     }
@@ -35,6 +37,7 @@ public func installProfileRoutes<Context: AuthRequestContextProtocol, Page: Resp
         let input = try await URLEncodedFormDecoder().decode(
             ProfileInput.self, from: request, context: context
         )
+        try validateCSRFToken(submitted: input.csrf_token, expected: context.csrfToken)
 
         guard var user = try await Context.User.find(context.user.id!, on: db) else {
             throw HTTPError(.notFound)
@@ -46,7 +49,8 @@ public func installProfileRoutes<Context: AuthRequestContextProtocol, Page: Resp
         let vm = ProfileViewModel(
             displayName: user.displayName,
             email: user.email,
-            savedMessage: "Profile updated."
+            savedMessage: "Profile updated.",
+            csrfToken: context.csrfToken
         )
         return try render(vm, context).response(from: request, context: context)
     }

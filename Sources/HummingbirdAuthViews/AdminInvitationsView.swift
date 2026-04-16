@@ -10,10 +10,12 @@ import PlotHTMX
 public struct AdminInvitationsView: Component {
     public var invitations: [AdminInvitationViewModel]
     public var baseURL: String
+    public var csrfToken: String?
 
-    public init(invitations: [AdminInvitationViewModel], baseURL: String) {
+    public init(invitations: [AdminInvitationViewModel], baseURL: String, csrfToken: String? = nil) {
         self.invitations = invitations
         self.baseURL = baseURL
+        self.csrfToken = csrfToken
     }
 
     private static let dateFormatter: DateFormatter = {
@@ -26,6 +28,8 @@ public struct AdminInvitationsView: Component {
         Div {
             // Create form
             Element(name: "form") {
+                Node.input(.type(.hidden), .name("csrf_token"),
+                           .value(csrfToken ?? ""))
                 Div {
                     Div {
                         Element(name: "label") { Text("Email (optional)") }
@@ -89,6 +93,8 @@ public struct AdminInvitationsView: Component {
                                 Element(name: "td") {
                                     if !inv.isConsumed {
                                         Element(name: "form") {
+                                            Node.input(.type(.hidden), .name("csrf_token"),
+                                                       .value(csrfToken ?? ""))
                                             Element(name: "button") { Text("Delete") }
                                                 .type("submit")
                                                 .class("button small danger")

@@ -46,3 +46,18 @@ public func decodeBase64URL(_ base64url: String) throws -> [UInt8] {
 public enum Base64URLError: Error {
     case invalidEncoding
 }
+
+public enum CSRFError: Error {
+    case missingToken
+    case invalidToken
+}
+
+/// Validate that a submitted CSRF token matches the session's CSRF token.
+public func validateCSRFToken(submitted: String?, expected: String?) throws {
+    guard let expected = expected else {
+        throw CSRFError.missingToken
+    }
+    guard let submitted = submitted, submitted == expected else {
+        throw CSRFError.invalidToken
+    }
+}

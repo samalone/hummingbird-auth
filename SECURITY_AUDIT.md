@@ -1,6 +1,6 @@
 # Security Audit — 2026-04-16
 
-Findings from a three-agent security review of the hummingbird-auth library.
+Findings from security reviews of the hummingbird-auth library.
 Work through these in priority order. Check off each item as fixed.
 
 ## Critical
@@ -44,3 +44,19 @@ Work through these in priority order. Check off each item as fixed.
 - [ ] **Flash message text not sanitized** — `AuthSession.addFlash()` is public API. If callers pass user-controlled text and views don't HTML-escape, it's stored XSS. Document the contract.
 
 - [ ] **Profile fields not validated** — `ProfileRouteInstaller.swift` lines 42-43. No length limit on displayName, no format validation on email.
+
+## Second Review — 2026-04-16 (full codebase)
+
+### High (fixed)
+
+- [x] **No CSRF protection on form POST endpoints** — Admin routes (role change, masquerade, invitation CRUD) and profile update accepted form POSTs with no anti-forgery tokens. Added per-session CSRF tokens stored in `AuthSession`, populated in context by `SessionMiddleware`, validated on all form POST handlers, and rendered as hidden fields in all view components.
+
+- [x] **Registration email/identity not bound to challenge** — `begin-registration` and `finish-registration` both accepted email/displayName/invitationToken as separate client inputs. An attacker could swap the email between begin and finish to bind their passkey to a different account. Fixed by storing registration context (email, displayName, invitationToken) in `PasskeyChallenge` at begin time and reading it back at finish time. `FinishRegistrationRequest` no longer accepts these fields from the client.
+
+### Medium (fixed)
+
+- [x] **Invitation email constraint not enforced** — Invitations created for a specific email did not verify that the registering user's email matched. Fixed: `begin-registration` now checks `invitation.email` against the submitted email (case-insensitive).
+
+- [x] **Logout during masquerade destroyed target user's sessions** — Logout deleted all sessions matching `context.user.id`, which during masquerade is the target user's ID. Fixed: logout now deletes only the current session by filtering on the session token from the cookie.
+
+- [x] **OAuth redirect URIs not validated for format or scheme** — `registerClient()` stored redirect URIs as-is with no validation. Fixed: redirect URIs must be absolute HTTP(S) URLs, must use HTTPS (HTTP allowed only for localhost/127.0.0.1/::1), and must not contain fragments.

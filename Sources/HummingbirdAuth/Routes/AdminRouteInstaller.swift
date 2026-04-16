@@ -5,11 +5,14 @@ import HummingbirdAuthCore
 import Logging
 
 // Decodable types must be at module scope in Swift 6 (not nested in generic closures).
-struct RoleInput: Decodable { var role: String }
+struct RoleInput: Decodable { var role: String; var csrf_token: String }
+struct MasqueradeInput: Decodable { var csrf_token: String }
 struct InviteInput: Decodable {
     var email: String?
     var expires_days: Int?
+    var csrf_token: String
 }
+struct DeleteInput: Decodable { var csrf_token: String }
 
 /// Configuration for admin routes.
 public struct AdminRouteConfiguration: Sendable {
@@ -75,15 +78,16 @@ public func installAdminRoutes<Context: AuthRequestContextProtocol, UsersPage: R
             throw HTTPError(.notFound)
         }
 
+        let input = try await URLEncodedFormDecoder().decode(
+            RoleInput.self, from: request, context: context
+        )
+        try validateCSRFToken(submitted: input.csrf_token, expected: context.csrfToken)
+
         // Prevent self-demotion.
         let currentUserID = context.realUserID ?? context.user.id
         guard id != currentUserID else {
             throw HTTPError(.badRequest, message: "Cannot change your own role")
         }
-
-        let input = try await URLEncodedFormDecoder().decode(
-            RoleInput.self, from: request, context: context
-        )
 
         user.isAdmin = input.role == "admin"
         try await user.save(on: db)
@@ -94,6 +98,11 @@ public func installAdminRoutes<Context: AuthRequestContextProtocol, UsersPage: R
     // MARK: - Masquerade
 
     router.post("/admin/users/:id/masquerade") { request, context -> Response in
+        let input = try await URLEncodedFormDecoder().decode(
+            MasqueradeInput.self, from: request, context: context
+        )
+        try validateCSRFToken(submitted: input.csrf_token, expected: context.csrfToken)
+
         guard let targetID = context.parameters.get("id", as: UUID.self),
               let _ = try await Context.User.find(targetID, on: db) else {
             throw HTTPError(.notFound)
@@ -117,6 +126,11 @@ public func installAdminRoutes<Context: AuthRequestContextProtocol, UsersPage: R
     }
 
     router.post("/admin/masquerade/end") { request, context -> Response in
+        let input = try await URLEncodedFormDecoder().decode(
+            MasqueradeInput.self, from: request, context: context
+        )
+        try validateCSRFToken(submitted: input.csrf_token, expected: context.csrfToken)
+
         guard let token = request.cookies[SessionConfiguration.cookieName]?.value,
               let session = try await AuthSession.query(on: db)
                 .filter(\.$token == token)
@@ -158,6 +172,7 @@ public func installAdminRoutes<Context: AuthRequestContextProtocol, UsersPage: R
         let input = try await URLEncodedFormDecoder().decode(
             InviteInput.self, from: request, context: context
         )
+        try validateCSRFToken(submitted: input.csrf_token, expected: context.csrfToken)
 
         let email = input.email?.trimmingCharacters(in: .whitespacesAndNewlines)
         let invitationService = InvitationService(
@@ -175,7 +190,12 @@ public func installAdminRoutes<Context: AuthRequestContextProtocol, UsersPage: R
         return .redirect(to: "/admin/invitations", type: .normal)
     }
 
-    router.post("/admin/invitations/:id/delete") { _, context -> Response in
+    router.post("/admin/invitations/:id/delete") { request, context -> Response in
+        let input = try await URLEncodedFormDecoder().decode(
+            DeleteInput.self, from: request, context: context
+        )
+        try validateCSRFToken(submitted: input.csrf_token, expected: context.csrfToken)
+
         guard let id = context.parameters.get("id", as: UUID.self),
               let invitation = try await Invitation.find(id, on: db) else {
             throw HTTPError(.notFound)
