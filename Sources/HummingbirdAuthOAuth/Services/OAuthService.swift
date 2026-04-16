@@ -62,7 +62,7 @@ public struct OAuthConfiguration: Sendable {
 
 /// OAuth 2.1 authorization server with PKCE support.
 public struct OAuthService: Sendable {
-    public let db: Database
+    let db: Database  // Package-internal; used by OAuthBearerMiddleware
     private let logger: Logger
     public let config: OAuthConfiguration
 
@@ -80,7 +80,7 @@ public struct OAuthService: Sendable {
         grantTypes: [String]?,
         scope: String?
     ) async throws -> OAuthClient {
-        let clientID = generateToken()
+        let clientID = generateSecureToken()
         let resolvedGrantTypes = grantTypes ?? ["authorization_code"]
         let resolvedScope = scope.map { requested in
             let requestedScopes = Set(requested.split(separator: " ").map(String.init))
@@ -108,7 +108,7 @@ public struct OAuthService: Sendable {
         codeChallenge: String,
         codeChallengeMethod: String
     ) async throws -> OAuthAuthorizationCode {
-        let code = generateToken()
+        let code = generateSecureToken()
         let authCode = OAuthAuthorizationCode(
             code: code,
             clientUUID: clientUUID,
@@ -213,10 +213,10 @@ public struct OAuthService: Sendable {
 
         guard !token.isAccessExpired, !token.isRevoked else { return nil }
 
-        // Throttle lastAccessedAt updates.
-        if let lastAccess = try await OAuthClient.find(token.clientUUID, on: db)?.lastAccessedAt,
-           Date().timeIntervalSince(lastAccess) > 5 * 60 {
-            if let client = try await OAuthClient.find(token.clientUUID, on: db) {
+        // Throttle lastAccessedAt updates (single fetch).
+        if let client = try await OAuthClient.find(token.clientUUID, on: db) {
+            let needsUpdate = client.lastAccessedAt.map { Date().timeIntervalSince($0) > 5 * 60 } ?? true
+            if needsUpdate {
                 client.lastAccessedAt = Date()
                 try await client.save(on: db)
             }
@@ -232,10 +232,7 @@ public struct OAuthService: Sendable {
             throw OAuthError.invalidRequest("Only S256 code challenge method is supported")
         }
         let hash = SHA256.hash(data: Data(verifier.utf8))
-        let computed = Data(hash).base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
+        let computed = encodeBase64URL(Data(hash))
         guard computed == challenge else {
             throw OAuthError.invalidGrant
         }
@@ -260,8 +257,8 @@ public struct OAuthService: Sendable {
 
     private func createToken(clientUUID: UUID, userID: UUID, scope: String) async throws -> OAuthToken {
         let token = OAuthToken(
-            accessToken: generateToken(),
-            refreshToken: generateToken(),
+            accessToken: generateSecureToken(),
+            refreshToken: generateSecureToken(),
             clientUUID: clientUUID,
             userID: userID,
             scope: scope,
@@ -272,11 +269,4 @@ public struct OAuthService: Sendable {
         return token
     }
 
-    private func generateToken() -> String {
-        var bytes = [UInt8](repeating: 0, count: 32)
-        _ = bytes.withUnsafeMutableBufferPointer { buffer in
-            SecRandomCopyBytes(kSecRandomDefault, buffer.count, buffer.baseAddress!)
-        }
-        return bytes.map { String(format: "%02x", $0) }.joined()
-    }
 }

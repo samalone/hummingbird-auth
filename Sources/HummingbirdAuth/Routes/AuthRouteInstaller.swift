@@ -103,9 +103,9 @@ public func installAuthRoutes<Context: AuthRequestContextProtocol>(
 
     // MARK: - Registration (requires invitations)
 
-    if config.invitations != nil {
+    if let invitationConfig = config.invitations {
         let invitationService = InvitationService(
-            db: db, logger: logger, config: config.invitations!
+            db: db, logger: logger, config: invitationConfig
         )
 
         auth.post("begin-registration") { request, _ -> Response in
@@ -148,7 +148,7 @@ public func installAuthRoutes<Context: AuthRequestContextProtocol>(
             )
 
             // Create or reclaim user.
-            let userID: UUID
+            let user: Context.User
             if var existing = try await Context.User.findByEmail(body.email, on: db) {
                 let credentialCount = try await PasskeyCredential.query(on: db)
                     .filter(\.$userID == existing.requireID())
@@ -158,12 +158,14 @@ public func installAuthRoutes<Context: AuthRequestContextProtocol>(
                 }
                 existing.displayName = body.displayName
                 try await existing.save(on: db)
-                userID = try existing.requireID()
+                user = existing
             } else {
                 let newUser = Context.User(displayName: body.displayName, email: body.email)
                 try await newUser.save(on: db)
-                userID = try newUser.requireID()
+                user = newUser
             }
+
+            let userID = try user.requireID()
 
             _ = try await passkeyService.finishRegistration(
                 userID: userID,
@@ -173,11 +175,7 @@ public func installAuthRoutes<Context: AuthRequestContextProtocol>(
             )
 
             try await invitationService.consumeInvitation(invitation, consumedByID: userID)
-
-            // Callback.
-            if let user = try await Context.User.find(userID, on: db) {
-                try await config.callbacks.onUserRegistered?(user)
-            }
+            try await config.callbacks.onUserRegistered?(user)
 
             // Create session.
             let sessionToken = UUID().uuidString

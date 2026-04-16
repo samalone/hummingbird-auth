@@ -27,7 +27,7 @@ public struct InvitationService: Sendable {
         invitedByID: UUID? = nil,
         expiresIn: TimeInterval? = nil
     ) async throws -> Invitation {
-        let token = generateToken()
+        let token = generateSecureToken()
         let invitation = Invitation(
             token: token,
             email: email,
@@ -67,12 +67,4 @@ public struct InvitationService: Sendable {
         logger.info("Invitation consumed: \(invitation.token.prefix(8))... by \(consumedByID)")
     }
 
-    /// Generate a cryptographically random 64-character hex token.
-    private func generateToken() -> String {
-        var bytes = [UInt8](repeating: 0, count: 32)
-        _ = bytes.withUnsafeMutableBufferPointer { buffer in
-            SecRandomCopyBytes(kSecRandomDefault, buffer.count, buffer.baseAddress!)
-        }
-        return bytes.map { String(format: "%02x", $0) }.joined()
-    }
 }

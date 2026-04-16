@@ -42,8 +42,6 @@ public struct PasskeyService: Sendable {
         username: String,
         displayName: String
     ) async throws -> PublicKeyCredentialCreationOptions {
-        // Clean up expired challenges opportunistically.
-        try? await PasskeyChallenge.cleanupExpired(on: db)
 
         let options = webAuthn.beginRegistration(
             user: PublicKeyCredentialUserEntity(
@@ -173,39 +171,4 @@ public struct PasskeyService: Sendable {
             .all()
     }
 }
-
-// MARK: - Base64URL Utilities
-
-/// Normalize any base64 string to base64url (no padding).
-///
-/// WebAuthn uses base64url throughout, but some libraries return standard
-/// base64 in certain code paths (e.g., swift-webauthn's `Credential.id`
-/// from `finishRegistration` is standard base64, while
-/// `AuthenticationCredential.id` is base64url). Always normalize before
-/// storing or comparing to avoid lookup mismatches.
-public func normalizeToBase64URL(_ value: String) -> String {
-    value
-        .replacingOccurrences(of: "+", with: "-")
-        .replacingOccurrences(of: "/", with: "_")
-        .replacingOccurrences(of: "=", with: "")
-}
-
-/// Encode data to base64url (no padding).
-public func encodeBase64URL(_ data: Data) -> String {
-    normalizeToBase64URL(data.base64EncodedString())
-}
-
-/// Decode a base64url string to bytes.
-public func decodeBase64URL(_ base64url: String) throws -> [UInt8] {
-    var base64 = base64url
-        .replacingOccurrences(of: "-", with: "+")
-        .replacingOccurrences(of: "_", with: "/")
-    let remainder = base64.count % 4
-    if remainder != 0 {
-        base64 += String(repeating: "=", count: 4 - remainder)
-    }
-    guard let data = Data(base64Encoded: base64) else {
-        throw PasskeyError.invalidChallenge
-    }
-    return Array(data)
-}
+// Base64URL utilities and generateSecureToken are in HummingbirdAuthCore/Utilities.swift
