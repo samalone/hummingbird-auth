@@ -34,14 +34,29 @@ where Context.User: FluentAuthUser {
             {
                 let effectiveUserID = session.masqueradeUserID ?? session.userID
                 if let user = try await Context.User.find(effectiveUserID, on: db) {
-                    context.user = user
-                    context.csrfToken = session.csrfToken
-
-                    // Populate masquerade state.
+                    // Populate masquerade state, but only if the real
+                    // user is still an admin. If they were demoted
+                    // mid-masquerade, end it silently.
                     if session.masqueradeUserID != nil, let realID = session.realUserID {
-                        context.masqueradingAs = user.displayName
-                        context.realUserID = realID
+                        if let realUser = try await Context.User.find(realID, on: db),
+                           realUser.isAdmin {
+                            context.user = user
+                            context.masqueradingAs = user.displayName
+                            context.realUserID = realID
+                        } else {
+                            // Real user is no longer admin — end masquerade.
+                            session.masqueradeUserID = nil
+                            session.realUserID = nil
+                            try await session.save(on: db)
+                            // Load the original (real) user as the session owner.
+                            if let originalUser = try await Context.User.find(session.userID, on: db) {
+                                context.user = originalUser
+                            }
+                        }
+                    } else {
+                        context.user = user
                     }
+                    context.csrfToken = session.csrfToken
                 }
 
                 // Consume flash messages (one-time display).
@@ -77,12 +92,17 @@ extension Cookie {
     }
 
     /// Create an expired session cookie (for logout).
+    /// Must use the same attributes as `authSession` so the browser
+    /// matches and removes the correct cookie.
     public static func expiredAuthSession(config: SessionConfiguration) -> Cookie {
         Cookie(
             name: SessionConfiguration.cookieName,
             value: "deleted",
             maxAge: 0,
-            path: config.cookiePath
+            path: config.cookiePath,
+            secure: config.secureCookie,
+            httpOnly: true,
+            sameSite: .lax
         )
     }
 }

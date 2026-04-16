@@ -294,7 +294,8 @@ func jsonResponse<T: Encodable & ResponseEncodable>(_ value: T) throws -> Respon
 
 /// Validate a return URL to prevent open redirect vulnerabilities.
 func validateReturnURL(_ returnURL: String?) -> String? {
-    guard let url = returnURL, !url.isEmpty, url.hasPrefix("/"), !url.hasPrefix("//") else {
+    guard let url = returnURL, !url.isEmpty, url.hasPrefix("/"), !url.hasPrefix("//"),
+          !url.contains("\\") else {
         return nil
     }
     return url

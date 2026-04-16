@@ -23,13 +23,13 @@ Work through these in priority order. Check off each item as fixed.
 
 - [x] **Invitation consumption race condition** — `InvitationService.swift` + `AuthRouteInstaller.swift`. Same TOCTOU pattern as auth code: two concurrent registrations can both consume the same invitation. Use atomic conditional update.
 
-- [ ] **Expired cookie missing security attributes** — `SessionMiddleware.swift` `expiredAuthSession()`. Missing `secure`, `httpOnly`, `sameSite` attributes that the set cookie has. Browser may treat them as different cookies, leaving the original intact.
+- [x] **Expired cookie missing security attributes** — `SessionMiddleware.swift` `expiredAuthSession()`. Missing `secure`, `httpOnly`, `sameSite` attributes that the set cookie has. Browser may treat them as different cookies, leaving the original intact.
 
-- [ ] **Masquerade persists after admin demotion** — `AuthRequestContext.swift` line 78. `AdminContext` trusts `realUserID != nil` without re-validating that the real user is still an admin. If demoted mid-masquerade, admin access persists. Re-validate in SessionMiddleware when masquerade is active.
+- [x] **Masquerade persists after admin demotion** — `AuthRequestContext.swift` line 78. `AdminContext` trusts `realUserID != nil` without re-validating that the real user is still an admin. If demoted mid-masquerade, admin access persists. Fixed: `SessionMiddleware` now re-validates the real user's admin status on each request and silently ends masquerade if they were demoted.
 
-- [ ] **Open redirect backslash edge case** — `AuthRouteInstaller.swift` `validateReturnURL`. Does not reject paths containing backslashes (e.g., `/\evil.com`) which some browsers normalize to `//evil.com`. Add `!url.contains("\\")`.
+- [x] **Open redirect backslash edge case** — `AuthRouteInstaller.swift` `validateReturnURL`. Does not reject paths containing backslashes (e.g., `/\evil.com`) which some browsers normalize to `//evil.com`. Add `!url.contains("\\")`.
 
-- [ ] **No rate limiting on token endpoint** — `OAuthRouteInstaller.swift`. Unlimited brute-force attempts against `/oauth/token`. Infrastructure concern but worth noting.
+- [ ] **No rate limiting on token endpoint** — `OAuthRouteInstaller.swift`. Unlimited brute-force attempts against `/oauth/token`. This is an infrastructure concern — apply rate limiting at the reverse proxy or API gateway layer rather than inside the library.
 
 ## Low
 
