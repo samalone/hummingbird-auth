@@ -45,7 +45,7 @@ public func installOAuthRoutes<Context: OAuthRequestContextProtocol>(
         return Response(
             status: .ok,
             headers: [.contentType: "application/json"],
-            body: .init(byteBuffer: ByteBuffer(data: data))
+            body: .init(byteBuffer: ByteBuffer(bytes: data))
         )
     }
 
@@ -72,7 +72,7 @@ public func installOAuthRoutes<Context: OAuthRequestContextProtocol>(
         let body: TokenRequest
         let contentType = request.headers[.contentType] ?? ""
         if contentType.contains("application/json") {
-            body = try JSONDecoder().decode(TokenRequest.self, from: bodyBuffer)
+            body = try JSONDecoder().decode(TokenRequest.self, from: Data(bodyBuffer.readableBytesView))
         } else {
             // Parse URL-encoded form body
             let formString = String(buffer: bodyBuffer)
@@ -118,7 +118,7 @@ public func installOAuthRoutes<Context: OAuthRequestContextProtocol>(
             return Response(
                 status: .ok,
                 headers: [.contentType: "application/json"],
-                body: .init(byteBuffer: ByteBuffer(data: data))
+                body: .init(byteBuffer: ByteBuffer(bytes: data))
             )
         } catch let error as OAuthError {
             let status: HTTPResponse.Status = error.errorCode == "invalid_client" ? .unauthorized : .badRequest
@@ -130,7 +130,7 @@ public func installOAuthRoutes<Context: OAuthRequestContextProtocol>(
             return Response(
                 status: status,
                 headers: [.contentType: "application/json"],
-                body: .init(byteBuffer: ByteBuffer(data: data))
+                body: .init(byteBuffer: ByteBuffer(bytes: data))
             )
         }
     }
@@ -181,7 +181,7 @@ private func handleClientRegistration(
     oauthService: OAuthService
 ) async throws -> Response {
     let bodyBuffer = try await request.body.collect(upTo: 1024 * 1024)
-    let body = try JSONDecoder().decode(ClientRegistrationRequest.self, from: bodyBuffer)
+    let body = try JSONDecoder().decode(ClientRegistrationRequest.self, from: Data(bodyBuffer.readableBytesView))
 
     guard !body.client_name.trimmingCharacters(in: .whitespaces).isEmpty else {
         throw HTTPError(.badRequest, message: "client_name is required")
@@ -209,7 +209,7 @@ private func handleClientRegistration(
     return Response(
         status: .created,
         headers: [.contentType: "application/json"],
-        body: .init(byteBuffer: ByteBuffer(data: data))
+        body: .init(byteBuffer: ByteBuffer(bytes: data))
     )
 }
 

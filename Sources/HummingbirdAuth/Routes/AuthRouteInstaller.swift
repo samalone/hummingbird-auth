@@ -45,7 +45,7 @@ public func installAuthRoutes<Context: AuthRequestContextProtocol>(
 
     auth.post("finish-login") { request, _ -> Response in
         let bodyBuffer = try await request.body.collect(upTo: 1024 * 1024)
-        let body = try JSONDecoder().decode(FinishLoginRequest.self, from: bodyBuffer)
+        let body = try JSONDecoder().decode(FinishLoginRequest.self, from: Data(bodyBuffer.readableBytesView))
 
         let challengeBytes = try decodeBase64URL(body.challengeBase64)
         let _ = try await passkeyService.verifyChallenge(challengeBytes, type: .authentication)
@@ -98,7 +98,7 @@ public func installAuthRoutes<Context: AuthRequestContextProtocol>(
         var response = Response(
             status: .ok,
             headers: [.contentType: "application/json"],
-            body: .init(byteBuffer: ByteBuffer(data: jsonData))
+            body: .init(byteBuffer: ByteBuffer(bytes: jsonData))
         )
         response.setCookie(.authSession(token: sessionToken, config: config.session))
 
@@ -116,7 +116,7 @@ public func installAuthRoutes<Context: AuthRequestContextProtocol>(
         auth.post("begin-registration") { request, _ -> Response in
             let bodyBuffer = try await request.body.collect(upTo: 1024 * 1024)
             let body = try JSONDecoder().decode(
-                BeginRegistrationRequest.self, from: bodyBuffer
+                BeginRegistrationRequest.self, from: Data(bodyBuffer.readableBytesView)
             )
 
             let invitation = try await invitationService.validateToken(body.invitationToken)
@@ -147,7 +147,7 @@ public func installAuthRoutes<Context: AuthRequestContextProtocol>(
         auth.post("finish-registration") { request, _ -> Response in
             let bodyBuffer = try await request.body.collect(upTo: 1024 * 1024)
             let body = try JSONDecoder().decode(
-                FinishRegistrationRequest.self, from: bodyBuffer
+                FinishRegistrationRequest.self, from: Data(bodyBuffer.readableBytesView)
             )
 
             let challengeBytes = try decodeBase64URL(body.challengeBase64)
@@ -222,7 +222,7 @@ public func installAuthRoutes<Context: AuthRequestContextProtocol>(
             var response = Response(
                 status: .ok,
                 headers: [.contentType: "application/json"],
-                body: .init(byteBuffer: ByteBuffer(data: jsonData))
+                body: .init(byteBuffer: ByteBuffer(bytes: jsonData))
             )
             response.setCookie(.authSession(token: sessionToken, config: config.session))
 
@@ -298,7 +298,7 @@ func jsonResponse<T: Encodable & ResponseEncodable>(_ value: T) throws -> Respon
     return Response(
         status: .ok,
         headers: [.contentType: "application/json"],
-        body: .init(byteBuffer: ByteBuffer(data: data))
+        body: .init(byteBuffer: ByteBuffer(bytes: data))
     )
 }
 
