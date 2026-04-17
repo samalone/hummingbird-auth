@@ -1,15 +1,20 @@
+import Crypto
 import Foundation
 
 /// Generate a cryptographically random 64-character hex token.
 ///
 /// Used for session tokens, invitation tokens, OAuth client IDs,
 /// authorization codes, and access/refresh tokens.
+///
+/// Uses `swift-crypto`'s `SymmetricKey(size:)`, which wraps the
+/// platform CSPRNG (`SecRandomCopyBytes` on Apple platforms,
+/// `getrandom(2)` / `/dev/urandom` on Linux). Portable across macOS
+/// dev and Linux container builds.
 public func generateSecureToken() -> String {
-    var bytes = [UInt8](repeating: 0, count: 32)
-    _ = bytes.withUnsafeMutableBufferPointer { buffer in
-        SecRandomCopyBytes(kSecRandomDefault, buffer.count, buffer.baseAddress!)
+    let key = SymmetricKey(size: .bits256)
+    return key.withUnsafeBytes { buffer in
+        buffer.map { String(format: "%02x", $0) }.joined()
     }
-    return bytes.map { String(format: "%02x", $0) }.joined()
 }
 
 /// Normalize any base64 string to base64url (no padding).

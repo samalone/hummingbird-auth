@@ -20,6 +20,10 @@ let package = Package(
         .package(url: "https://github.com/samalone/Plot.git", branch: "samalone/all-fixes"),
         .package(url: "https://github.com/samalone/plot-htmx.git", branch: "main"),
         .package(url: "https://github.com/vapor/fluent-sqlite-driver.git", from: "4.0.0"),
+        // swift-crypto provides a portable CSPRNG (wraps SecRandomCopyBytes
+        // on Apple, getrandom(2)/urandom on Linux) so the same code builds
+        // for macOS dev and Linux containers.
+        .package(url: "https://github.com/apple/swift-crypto.git", "2.0.0"..<"5.0.0"),
     ],
     targets: [
         // Layer 1: Protocols, configuration, and view models — no Fluent dependency
@@ -27,6 +31,7 @@ let package = Package(
             name: "HummingbirdAuthCore",
             dependencies: [
                 .product(name: "Hummingbird", package: "hummingbird"),
+                .product(name: "Crypto", package: "swift-crypto"),
             ]
         ),
 
