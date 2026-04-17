@@ -34,6 +34,19 @@ public protocol AuthRequestContextProtocol: RequestContext {
 
     /// CSRF token from the current session, for embedding in forms.
     var csrfToken: String? { get set }
+
+    /// The path prefix under which the app is mounted, e.g. `"/prospero"`,
+    /// or `""` when mounted at the domain root. Used by library handlers
+    /// when they need to emit absolute redirect URLs that stay inside the app.
+    ///
+    /// Apps that mount their routes on a `router.group(RouterPath(prefix))`
+    /// should expose the same prefix here. A default empty value is provided
+    /// for apps mounted at root.
+    var mountPath: String { get }
+}
+
+extension AuthRequestContextProtocol {
+    public var mountPath: String { "" }
 }
 
 /// Child context for routes requiring an authenticated user.
@@ -46,6 +59,7 @@ public struct AuthenticatedContext<Parent: AuthRequestContextProtocol>: ChildReq
     public let masqueradingAs: String?
     public let realUserID: UUID?
     public let csrfToken: String?
+    public let mountPath: String
 
     public init(context: Parent) throws {
         guard let user = context.user else {
@@ -57,6 +71,7 @@ public struct AuthenticatedContext<Parent: AuthRequestContextProtocol>: ChildReq
         self.masqueradingAs = context.masqueradingAs
         self.realUserID = context.realUserID
         self.csrfToken = context.csrfToken
+        self.mountPath = context.mountPath
     }
 }
 
@@ -74,6 +89,7 @@ public struct AdminContext<Parent: AuthRequestContextProtocol>: ChildRequestCont
     public let masqueradingAs: String?
     public let realUserID: UUID?
     public let csrfToken: String?
+    public let mountPath: String
 
     public init(context: Parent) throws {
         guard let user = context.user else {
@@ -90,5 +106,6 @@ public struct AdminContext<Parent: AuthRequestContextProtocol>: ChildRequestCont
         self.masqueradingAs = context.masqueradingAs
         self.realUserID = context.realUserID
         self.csrfToken = context.csrfToken
+        self.mountPath = context.mountPath
     }
 }

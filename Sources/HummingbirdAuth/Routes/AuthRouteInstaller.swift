@@ -6,21 +6,26 @@ import Logging
 import NIOCore
 import WebAuthn
 
-/// Install authentication routes on a router.
+/// Install authentication routes on a router or router group.
 ///
 /// Registers passkey ceremony endpoints under `config.pathPrefix`:
-/// - `POST /auth/begin-login`
-/// - `POST /auth/finish-login`
-/// - `POST /auth/begin-registration` (if invitations enabled)
-/// - `POST /auth/finish-registration` (if invitations enabled)
-/// - `POST /auth/logout`
+/// - `POST {pathPrefix}/begin-login`
+/// - `POST {pathPrefix}/finish-login`
+/// - `POST {pathPrefix}/begin-registration` (if invitations enabled)
+/// - `POST {pathPrefix}/finish-registration` (if invitations enabled)
+/// - `POST {pathPrefix}/logout`
+///
+/// `config.pathPrefix` defaults to `/auth`. The routes land under whatever
+/// router or group is passed in, so apps mounted on a sub-path can use
+/// `router.group(RouterPath("/myapp"))` as the first argument and the
+/// library routes will land under `/myapp/auth/…` automatically.
 ///
 /// Usage:
 /// ```swift
 /// installAuthRoutes(on: router, db: db, config: authConfig, logger: logger)
 /// ```
 public func installAuthRoutes<Context: AuthRequestContextProtocol>(
-    on router: Router<Context>,
+    on router: some RouterMethods<Context>,
     db: Database,
     config: AuthConfiguration<Context.User>,
     logger: Logger

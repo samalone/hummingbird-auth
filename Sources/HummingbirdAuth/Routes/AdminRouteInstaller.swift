@@ -42,6 +42,10 @@ public struct AdminRouteConfiguration: Sendable {
 /// - `POST /admin/invitations` — create invitation
 /// - `POST /admin/invitations/:id/delete` — delete unused invitation
 ///
+/// Routes land under whatever `RouterGroup` is passed in. Internal redirects
+/// use `context.mountPath` from `AuthRequestContextProtocol` (default `""`),
+/// which apps mounted on a sub-path should set to that prefix.
+///
 /// The `renderUsers` and `renderInvitations` closures receive view model
 /// arrays and should return a `ResponseGenerator` (typically `HTML` pages).
 public func installAdminRoutes<Context: AuthRequestContextProtocol, UsersPage: ResponseGenerator, InvitationsPage: ResponseGenerator>(
@@ -92,7 +96,7 @@ public func installAdminRoutes<Context: AuthRequestContextProtocol, UsersPage: R
         user.isAdmin = input.role == "admin"
         try await user.save(on: db)
 
-        return .redirect(to: "/admin/users", type: .normal)
+        return .redirect(to: "\(context.mountPath)/admin/users", type: .normal)
     }
 
     // MARK: - Masquerade
@@ -122,7 +126,10 @@ public func installAdminRoutes<Context: AuthRequestContextProtocol, UsersPage: R
         session.realUserID = adminID
         try await session.save(on: db)
 
-        return .redirect(to: "/", type: .normal)
+        // After starting a masquerade, send the admin to the app's
+        // landing page (the mount path, or "/" if mounted at root).
+        let landing = context.mountPath.isEmpty ? "/" : context.mountPath
+        return .redirect(to: landing, type: .normal)
     }
 
     router.post("/admin/masquerade/end") { request, context -> Response in
@@ -144,7 +151,7 @@ public func installAdminRoutes<Context: AuthRequestContextProtocol, UsersPage: R
         session.realUserID = nil
         try await session.save(on: db)
 
-        return .redirect(to: "/admin/users", type: .normal)
+        return .redirect(to: "\(context.mountPath)/admin/users", type: .normal)
     }
 
     // MARK: - Invitation Management
@@ -187,7 +194,7 @@ public func installAdminRoutes<Context: AuthRequestContextProtocol, UsersPage: R
             invitedByID: context.realUserID ?? context.user.id
         )
 
-        return .redirect(to: "/admin/invitations", type: .normal)
+        return .redirect(to: "\(context.mountPath)/admin/invitations", type: .normal)
     }
 
     router.post("/admin/invitations/:id/delete") { request, context -> Response in
@@ -204,6 +211,6 @@ public func installAdminRoutes<Context: AuthRequestContextProtocol, UsersPage: R
             throw HTTPError(.badRequest, message: "Cannot delete a consumed invitation")
         }
         try await invitation.delete(on: db)
-        return .redirect(to: "/admin/invitations", type: .normal)
+        return .redirect(to: "\(context.mountPath)/admin/invitations", type: .normal)
     }
 }

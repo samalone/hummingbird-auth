@@ -15,6 +15,11 @@ struct ProfileInput: Decodable {
 /// - `GET /profile` — show the profile form
 /// - `POST /profile` — update display name and email
 ///
+/// Routes land under whatever `RouterGroup` is passed in, so apps mounted on
+/// a sub-path can pass e.g. `router.group(RouterPath("/myapp")).group(context:
+/// AuthenticatedContext<AppContext>.self)` and the profile routes will live at
+/// `/myapp/profile`.
+///
 /// The `render` closure receives a `ProfileViewModel` and the request context,
 /// and should return a `ResponseGenerator` (typically an `HTML` page wrapping
 /// a `ProfileView` from HummingbirdAuthViews in your app's layout).
