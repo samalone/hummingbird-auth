@@ -87,10 +87,27 @@ public func installAdminRoutes<Context: AuthRequestContextProtocol, UsersPage: R
         )
         try validateCSRFToken(submitted: input.csrf_token, expected: context.csrfToken)
 
+        // For validation failures that are user-visible (not developer
+        // errors like CSRF or not-found), attach a flash message and
+        // redirect back to /admin/users so browsers see an HTML page
+        // rather than a JSON error blob.
+        func bail(_ message: String) async throws -> Response {
+            guard let token = request.cookies[SessionConfiguration.cookieName]?.value,
+                  let session = try await AuthSession.query(on: db)
+                    .filter(\.$token == token)
+                    .first()
+            else {
+                throw HTTPError(.badRequest, message: message)
+            }
+            session.addFlash(.error, message)
+            try await session.save(on: db)
+            return .redirect(to: "\(context.mountPath)/admin/users", type: .normal)
+        }
+
         // Prevent self-demotion.
         let currentUserID = context.realUserID ?? context.user.id
-        guard id != currentUserID else {
-            throw HTTPError(.badRequest, message: "Cannot change your own role")
+        if id == currentUserID {
+            return try await bail("Cannot change your own role")
         }
 
         let makeAdmin = input.role == "admin"
@@ -101,8 +118,8 @@ public func installAdminRoutes<Context: AuthRequestContextProtocol, UsersPage: R
         // bypassing the disabled UI button.
         if user.isAdmin && !makeAdmin {
             let adminCount = try await Context.User.countAdmins(on: db)
-            guard adminCount > 1 else {
-                throw HTTPError(.badRequest, message: "At least one admin must remain")
+            if adminCount <= 1 {
+                return try await bail("At least one admin must remain")
             }
         }
 

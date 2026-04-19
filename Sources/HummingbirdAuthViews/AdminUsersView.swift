@@ -85,16 +85,14 @@ public struct AdminUsersView: Component {
                                         }
                                         .type("submit")
                                         .class("button small secondary")
-                                        if demotingLastAdmin {
-                                            roleButton
-                                                .attribute(named: "disabled", value: "")
-                                                .attribute(
-                                                    named: "title",
-                                                    value: "At least one admin must remain."
-                                                )
-                                        } else {
-                                            roleButton
-                                        }
+                                        roleButton
+                                            .disabled(demotingLastAdmin)
+                                            .attribute(
+                                                named: "title",
+                                                value: demotingLastAdmin
+                                                    ? "At least one admin must remain."
+                                                    : ""
+                                            )
                                     }
                                     .attribute(named: "method", value: "POST")
                                     .attribute(named: "action", value: "\(pathPrefix)/admin/users/\(user.id)/role")
