@@ -216,7 +216,10 @@ public func installAuthRoutes<Context: AuthRequestContextProtocol>(
             )
             try await session.save(on: db)
 
-            let responseBody = FinishRegistrationResponse(success: true, redirectTo: "/")
+            // Freshly-registered user is now logged in — send them
+            // wherever post-login traffic normally lands.
+            let redirectTo = config.callbacks.postLoginRedirect(user)
+            let responseBody = FinishRegistrationResponse(success: true, redirectTo: redirectTo)
             let jsonData = try JSONEncoder().encode(responseBody)
 
             var response = Response(
