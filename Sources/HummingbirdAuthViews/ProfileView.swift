@@ -7,9 +7,13 @@ import PlotHTMX
 /// Renders a display name and email form. Wrap in your app's PageLayout.
 public struct ProfileView: Component {
     public var viewModel: ProfileViewModel
+    /// Prefix prepended to the form action URL (the app's mount path,
+    /// e.g. `"/prospero"`, or `""` when mounted at root).
+    public var pathPrefix: String
 
-    public init(viewModel: ProfileViewModel) {
+    public init(viewModel: ProfileViewModel, pathPrefix: String = "") {
         self.viewModel = viewModel
+        self.pathPrefix = pathPrefix
     }
 
     public var body: Component {
@@ -49,7 +53,7 @@ public struct ProfileView: Component {
                 .class("form-actions")
             }
             .attribute(named: "method", value: "POST")
-            .attribute(named: "action", value: "/profile")
+            .attribute(named: "action", value: "\(pathPrefix)/profile")
         }
         .class("auth-profile-view")
     }

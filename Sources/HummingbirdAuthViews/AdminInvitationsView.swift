@@ -11,11 +11,20 @@ public struct AdminInvitationsView: Component {
     public var invitations: [AdminInvitationViewModel]
     public var baseURL: String
     public var csrfToken: String?
+    /// Prefix prepended to form action URLs (the app's mount path, e.g.
+    /// `"/prospero"`, or `""` when mounted at root).
+    public var pathPrefix: String
 
-    public init(invitations: [AdminInvitationViewModel], baseURL: String, csrfToken: String? = nil) {
+    public init(
+        invitations: [AdminInvitationViewModel],
+        baseURL: String,
+        csrfToken: String? = nil,
+        pathPrefix: String = ""
+    ) {
         self.invitations = invitations
         self.baseURL = baseURL
         self.csrfToken = csrfToken
+        self.pathPrefix = pathPrefix
     }
 
     private static let dateFormatter: DateFormatter = {
@@ -56,7 +65,7 @@ public struct AdminInvitationsView: Component {
                     .class("auth-button primary")
             }
             .attribute(named: "method", value: "POST")
-            .attribute(named: "action", value: "/admin/invitations")
+            .attribute(named: "action", value: "\(pathPrefix)/admin/invitations")
             .class("invite-form")
 
             if !invitations.isEmpty {
@@ -100,7 +109,7 @@ public struct AdminInvitationsView: Component {
                                                 .class("button small danger")
                                         }
                                         .attribute(named: "method", value: "POST")
-                                        .attribute(named: "action", value: "/admin/invitations/\(inv.id)/delete")
+                                        .attribute(named: "action", value: "\(pathPrefix)/admin/invitations/\(inv.id)/delete")
                                     }
                                 }
                             }

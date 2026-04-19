@@ -93,7 +93,20 @@ public func installAdminRoutes<Context: AuthRequestContextProtocol, UsersPage: R
             throw HTTPError(.badRequest, message: "Cannot change your own role")
         }
 
-        user.isAdmin = input.role == "admin"
+        let makeAdmin = input.role == "admin"
+
+        // Enforce "at least one admin" invariant: if we're demoting the
+        // last remaining admin, refuse. Guards against two admins
+        // demoting each other down to zero and against a crafted POST
+        // bypassing the disabled UI button.
+        if user.isAdmin && !makeAdmin {
+            let adminCount = try await Context.User.countAdmins(on: db)
+            guard adminCount > 1 else {
+                throw HTTPError(.badRequest, message: "At least one admin must remain")
+            }
+        }
+
+        user.isAdmin = makeAdmin
         try await user.save(on: db)
 
         return .redirect(to: "\(context.mountPath)/admin/users", type: .normal)
