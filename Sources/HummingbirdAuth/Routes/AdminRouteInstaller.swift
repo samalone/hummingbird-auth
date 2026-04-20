@@ -134,7 +134,7 @@ private func installAdminRoutesImpl<
         let users = try await Context.User.query(on: db).all()
             .sorted { ($0.createdAt ?? .distantPast) < ($1.createdAt ?? .distantPast) }
 
-        let viewModels = users.map { AdminUserViewModel(from: $0) }
+        let viewModels = try users.map { try AdminUserViewModel(from: $0) }
 
         return try renderUsers(viewModels, context).response(from: request, context: context)
     }
@@ -189,8 +189,9 @@ private func installAdminRoutesImpl<
         user.isAdmin = makeAdmin
         try await user.save(on: db)
 
+        let fragment = try renderUserRow.map { try $0(AdminUserViewModel(from: user), context) }
         return try htmxFragmentOrRedirect(
-            fragment: { renderUserRow?(AdminUserViewModel(from: user), context) },
+            fragment: { fragment },
             isHTMX: isHTMXRequest(request),
             redirectTo: "\(context.mountPath)/admin/users",
             request: request,
@@ -337,10 +338,11 @@ private func htmxFragmentOrRedirect<Fragment: ResponseGenerator>(
 }
 
 extension AdminUserViewModel {
-    /// Build a view model from a Fluent-backed user.
-    init<U: FluentAuthUser>(from user: U) {
+    /// Build a view model from a Fluent-backed user. The user must have been
+    /// loaded from the database (or just saved), so `id` is non-nil.
+    init<U: FluentAuthUser>(from user: U) throws {
         self.init(
-            id: user.id!,
+            id: try user.requireID(),
             displayName: user.displayName,
             email: user.email,
             isAdmin: user.isAdmin,
