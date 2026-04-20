@@ -88,9 +88,7 @@ public func installAdminRoutes<
     )
 }
 
-/// Back-compat overload for callers that don't provide HTMX fragment
-/// renderers. Keeps the original two-renderer signature so existing call
-/// sites don't need to spell out `UserRowFragment` / `InvitationListFragment`.
+/// Overload for callers that do not supply HTMX fragment renderers.
 public func installAdminRoutes<
     Context: AuthRequestContextProtocol,
     UsersPage: ResponseGenerator,
@@ -103,9 +101,6 @@ public func installAdminRoutes<
     renderUsers: @escaping @Sendable ([AdminUserViewModel], AdminContext<Context>) -> UsersPage,
     renderInvitations: @escaping @Sendable ([AdminInvitationViewModel], String, AdminContext<Context>) -> InvitationsPage
 ) where Context.User: FluentAuthUser {
-    // Concrete fragment types are never invoked here because the closures
-    // are `nil`; `Response` is a convenient existentially-available
-    // `ResponseGenerator`.
     let noUserRow: (@Sendable (AdminUserViewModel, AdminContext<Context>) -> Response)? = nil
     let noInvitationList: (@Sendable ([AdminInvitationViewModel], String, AdminContext<Context>) -> Response)? = nil
     installAdminRoutesImpl(
@@ -139,15 +134,7 @@ private func installAdminRoutesImpl<
         let users = try await Context.User.query(on: db).all()
             .sorted { ($0.createdAt ?? .distantPast) < ($1.createdAt ?? .distantPast) }
 
-        let viewModels = users.map { user in
-            AdminUserViewModel(
-                id: user.id!,
-                displayName: user.displayName,
-                email: user.email,
-                isAdmin: user.isAdmin,
-                createdAt: user.createdAt
-            )
-        }
+        let viewModels = users.map { AdminUserViewModel(from: $0) }
 
         return try renderUsers(viewModels, context).response(from: request, context: context)
     }
@@ -202,20 +189,13 @@ private func installAdminRoutesImpl<
         user.isAdmin = makeAdmin
         try await user.save(on: db)
 
-        // HTMX partial swap: return the re-rendered user row if the caller
-        // provided a fragment renderer and the request is from HTMX.
-        if let renderUserRow, isHTMXRequest(request) {
-            let vm = AdminUserViewModel(
-                id: user.id!,
-                displayName: user.displayName,
-                email: user.email,
-                isAdmin: user.isAdmin,
-                createdAt: user.createdAt
-            )
-            return try renderUserRow(vm, context).response(from: request, context: context)
-        }
-
-        return .redirect(to: "\(context.mountPath)/admin/users", type: .normal)
+        return try htmxFragmentOrRedirect(
+            fragment: { renderUserRow?(AdminUserViewModel(from: user), context) },
+            isHTMX: isHTMXRequest(request),
+            redirectTo: "\(context.mountPath)/admin/users",
+            request: request,
+            context: context
+        )
     }
 
     // MARK: - Masquerade
@@ -299,14 +279,17 @@ private func installAdminRoutesImpl<
             invitedByID: context.realUserID ?? context.user.id
         )
 
-        // HTMX partial swap: return the re-rendered invitation list.
-        if let renderInvitationList, isHTMXRequest(request) {
-            let viewModels = try await fetchInvitationViewModels(db: db)
-            return try renderInvitationList(viewModels, config.baseURL, context)
-                .response(from: request, context: context)
-        }
-
-        return .redirect(to: "\(context.mountPath)/admin/invitations", type: .normal)
+        let isHTMX = isHTMXRequest(request)
+        let viewModels = isHTMX && renderInvitationList != nil
+            ? try await fetchInvitationViewModels(db: db)
+            : []
+        return try htmxFragmentOrRedirect(
+            fragment: { renderInvitationList?(viewModels, config.baseURL, context) },
+            isHTMX: isHTMX,
+            redirectTo: "\(context.mountPath)/admin/invitations",
+            request: request,
+            context: context
+        )
     }
 
     router.post("/admin/invitations/:id/delete") { request, context -> Response in
@@ -324,14 +307,45 @@ private func installAdminRoutesImpl<
         }
         try await invitation.delete(on: db)
 
-        // HTMX partial swap: return the re-rendered invitation list.
-        if let renderInvitationList, isHTMXRequest(request) {
-            let viewModels = try await fetchInvitationViewModels(db: db)
-            return try renderInvitationList(viewModels, config.baseURL, context)
-                .response(from: request, context: context)
-        }
+        let isHTMX = isHTMXRequest(request)
+        let viewModels = isHTMX && renderInvitationList != nil
+            ? try await fetchInvitationViewModels(db: db)
+            : []
+        return try htmxFragmentOrRedirect(
+            fragment: { renderInvitationList?(viewModels, config.baseURL, context) },
+            isHTMX: isHTMX,
+            redirectTo: "\(context.mountPath)/admin/invitations",
+            request: request,
+            context: context
+        )
+    }
+}
 
-        return .redirect(to: "\(context.mountPath)/admin/invitations", type: .normal)
+/// If the request came from HTMX and the caller supplied a fragment, render
+/// the fragment as the response; otherwise fall back to a redirect.
+private func htmxFragmentOrRedirect<Fragment: ResponseGenerator>(
+    fragment: () throws -> Fragment?,
+    isHTMX: Bool,
+    redirectTo: String,
+    request: Request,
+    context: some RequestContext
+) throws -> Response {
+    if isHTMX, let fragment = try fragment() {
+        return try fragment.response(from: request, context: context)
+    }
+    return .redirect(to: redirectTo, type: .normal)
+}
+
+extension AdminUserViewModel {
+    /// Build a view model from a Fluent-backed user.
+    init<U: FluentAuthUser>(from user: U) {
+        self.init(
+            id: user.id!,
+            displayName: user.displayName,
+            email: user.email,
+            isAdmin: user.isAdmin,
+            createdAt: user.createdAt
+        )
     }
 }
 
