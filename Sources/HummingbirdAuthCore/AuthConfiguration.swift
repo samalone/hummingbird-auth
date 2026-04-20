@@ -113,12 +113,13 @@ public struct AuthCallbacks<U: AuthUser>: Sendable {
     public var postLogoutRedirect: String
 
     /// Called after a user successfully registers via an invitation.
-    /// Receives the newly-created user *and* the invitation that was
-    /// consumed during registration. Apps can use the invitation's
-    /// metadata (id, email, invitedByID) to apply invitation-specific
-    /// side effects — e.g. creating a task-share row for a share-link
-    /// invitation.
-    public var onUserRegistered: (@Sendable (U, Invitation) async throws -> Void)?
+    /// Receives the newly-created user *and* a `ConsumedInvitation` DTO
+    /// snapshot of the invitation that was consumed during registration.
+    /// Apps can use the DTO's metadata (id, email, invitedByID) to apply
+    /// invitation-specific side effects — e.g. creating a task-share row
+    /// for a share-link invitation. The DTO is a plain Swift struct so
+    /// this callback's signature does not require a Fluent dependency.
+    public var onUserRegistered: (@Sendable (U, ConsumedInvitation) async throws -> Void)?
 
     /// Called after a user logs in.
     public var onUserLoggedIn: (@Sendable (U) async throws -> Void)?
@@ -126,7 +127,7 @@ public struct AuthCallbacks<U: AuthUser>: Sendable {
     public init(
         postLoginRedirect: @Sendable @escaping (U) -> String = { _ in "/" },
         postLogoutRedirect: String = "/login",
-        onUserRegistered: (@Sendable (U, Invitation) async throws -> Void)? = nil,
+        onUserRegistered: (@Sendable (U, ConsumedInvitation) async throws -> Void)? = nil,
         onUserLoggedIn: (@Sendable (U) async throws -> Void)? = nil
     ) {
         self.postLoginRedirect = postLoginRedirect

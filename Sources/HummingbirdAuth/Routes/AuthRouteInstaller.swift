@@ -207,7 +207,31 @@ public func installAuthRoutes<Context: AuthRequestContextProtocol>(
             let consumedInvitation = try await invitationService.consumeInvitation(
                 invitation, consumedByID: userID
             )
-            try await config.callbacks.onUserRegistered?(user, consumedInvitation)
+            // Translate the Fluent model into a plain DTO so the Core
+            // callback signature doesn't need to know about Fluent. The
+            // two optionals must be populated after a successful consume —
+            // if they somehow aren't, treat it as a server bug (500) rather
+            // than silently dropping the side effect.
+            guard
+                let consumedID = consumedInvitation.id,
+                let consumedAt = consumedInvitation.consumedAt,
+                let consumedByIDResolved = consumedInvitation.consumedByID
+            else {
+                throw HTTPError(
+                    .internalServerError,
+                    message: "consumeInvitation returned an invitation without id/consumedAt/consumedByID"
+                )
+            }
+            let consumedDTO = ConsumedInvitation(
+                id: consumedID,
+                token: consumedInvitation.token,
+                email: consumedInvitation.email,
+                invitedByID: consumedInvitation.invitedByID,
+                expiresAt: consumedInvitation.expiresAt,
+                consumedAt: consumedAt,
+                consumedByID: consumedByIDResolved
+            )
+            try await config.callbacks.onUserRegistered?(user, consumedDTO)
 
             // Create session.
             let sessionToken = generateSecureToken()

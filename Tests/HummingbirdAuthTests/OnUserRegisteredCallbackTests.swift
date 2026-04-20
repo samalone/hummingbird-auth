@@ -8,8 +8,9 @@ import Testing
 @testable import HummingbirdAuth
 @testable import HummingbirdAuthCore
 
-/// Verifies that the `AuthCallbacks.onUserRegistered` callback receives the
-/// `Invitation` that was consumed during registration.
+/// Verifies that the `AuthCallbacks.onUserRegistered` callback receives a
+/// `ConsumedInvitation` DTO describing the invitation that was consumed
+/// during registration.
 ///
 /// We can't easily exercise the full finish-registration HTTP handler from
 /// a unit test (it requires a real WebAuthn credential ceremony with a
@@ -20,13 +21,15 @@ import Testing
 ///    `consumedAt` is non-nil, whose `consumedByID` matches the user, and
 ///    whose `id`/`token` match the invitation that was passed in.
 /// 2. The `AuthCallbacks.onUserRegistered` signature accepts
-///    `(User, Invitation)` — the closure compiles and fires with both
-///    arguments.
+///    `(User, ConsumedInvitation)` — the closure compiles and fires with
+///    both arguments, where `ConsumedInvitation` is a plain-Swift DTO
+///    built from the Fluent model by the route installer.
 ///
 /// Together these cover the behavior apps (Life Balance) depend on: when
-/// the callback fires, the invitation has its metadata filled in, so the
-/// app can read `email`, `invitedByID`, `id`, and `consumedAt` to apply
-/// invitation-specific side effects (e.g. task-share acceptance).
+/// the callback fires, the DTO has its metadata filled in, so the app
+/// can read `email`, `invitedByID`, `id`, and `consumedAt` to apply
+/// invitation-specific side effects (e.g. task-share acceptance) without
+/// ever touching a Fluent model.
 @Suite("AuthCallbacks.onUserRegistered passes consumed invitation")
 struct OnUserRegisteredCallbackTests {
 
@@ -75,7 +78,7 @@ struct OnUserRegisteredCallbackTests {
         #expect(consumed.email == "invitee@example.com")
     }
 
-    @Test("onUserRegistered callback signature accepts (User, Invitation) and receives matching invitation")
+    @Test("onUserRegistered callback signature accepts (User, ConsumedInvitation) and receives matching DTO")
     func callbackReceivesInvitation() async throws {
         let (fluent, service) = try await makeService()
         defer { Task { try? await fluent.shutdown() } }
@@ -88,43 +91,54 @@ struct OnUserRegisteredCallbackTests {
             expiresAt: Date().addingTimeInterval(3600)
         )
         try await invitation.save(on: fluent.db())
+        let invitationID = try invitation.requireID()
 
         // Record what the callback sees so we can assert on it after firing.
         actor Recorder {
             var capturedUserEmail: String?
             var capturedInvitationID: UUID?
             var capturedInvitationToken: String?
-            var capturedConsumedAt: Date?
+            var capturedEmail: String?
+            var capturedConsumedByID: UUID?
 
-            func record(user: StubUser, invitation: Invitation) throws {
+            func record(user: StubUser, dto: ConsumedInvitation) {
                 self.capturedUserEmail = user.email
-                self.capturedInvitationID = try invitation.requireID()
-                self.capturedInvitationToken = invitation.token
-                self.capturedConsumedAt = invitation.consumedAt
+                self.capturedInvitationID = dto.id
+                self.capturedInvitationToken = dto.token
+                self.capturedEmail = dto.email
+                self.capturedConsumedByID = dto.consumedByID
             }
         }
         let recorder = Recorder()
 
-        // This is the signature we're verifying: (User, Invitation).
+        // This is the signature we're verifying: (User, ConsumedInvitation).
         var callbacks = AuthCallbacks<StubUser>()
-        callbacks.onUserRegistered = { user, invitation in
-            try await recorder.record(user: user, invitation: invitation)
+        callbacks.onUserRegistered = { user, dto in
+            await recorder.record(user: user, dto: dto)
         }
 
-        // Simulate the route handler's flow: consume first, then fire callback
-        // with the returned consumed invitation.
+        // Simulate the route handler's flow: consume first, translate to
+        // the DTO, then fire the callback with that DTO. This mirrors
+        // what `AuthRouteInstaller` does after a successful registration.
         let userID = try await insertStubUser(email: "cb@example.com", on: fluent.db())
         let user = StubUser(displayName: "Callback User", email: "cb@example.com")
         let consumed = try await service.consumeInvitation(invitation, consumedByID: userID)
-        try await callbacks.onUserRegistered?(user, consumed)
+        let dto = ConsumedInvitation(
+            id: try consumed.requireID(),
+            token: consumed.token,
+            email: consumed.email,
+            invitedByID: consumed.invitedByID,
+            expiresAt: consumed.expiresAt,
+            consumedAt: try #require(consumed.consumedAt),
+            consumedByID: try #require(consumed.consumedByID)
+        )
+        try await callbacks.onUserRegistered?(user, dto)
 
         #expect(await recorder.capturedUserEmail == "cb@example.com")
         #expect(await recorder.capturedInvitationToken == originalToken)
-        #expect(await recorder.capturedInvitationID != nil)
-        // The invitation visible to the callback must have consumedAt set —
-        // apps rely on this to know registration is finalized before they
-        // apply side effects.
-        #expect(await recorder.capturedConsumedAt != nil)
+        #expect(await recorder.capturedInvitationID == invitationID)
+        #expect(await recorder.capturedEmail == "cb@example.com")
+        #expect(await recorder.capturedConsumedByID == userID)
     }
 
     // MARK: - Helpers
