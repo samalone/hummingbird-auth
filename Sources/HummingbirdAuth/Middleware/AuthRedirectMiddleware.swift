@@ -1,6 +1,11 @@
 import HTTPTypes
 import Hummingbird
 
+extension HTTPField.Name {
+    /// The `HX-Request` header HTMX sets on every request it initiates.
+    public static let hxRequest = HTTPField.Name("HX-Request")!
+}
+
 /// Catches 401 errors on HTML requests and redirects to the login page.
 /// Passes through 401 unchanged for API requests.
 ///
@@ -31,7 +36,7 @@ public struct AuthRedirectMiddleware<Context: RequestContext>: RouterMiddleware 
             let contentType = request.headers[.contentType] ?? ""
             if accept.contains("application/json")
                 || contentType.contains("application/json")
-                || isHTMX(request)
+                || isHTMXRequest(request)
             {
                 throw error
             }
@@ -41,15 +46,11 @@ public struct AuthRedirectMiddleware<Context: RequestContext>: RouterMiddleware 
             return .redirect(to: "\(loginPath)?return=\(returnTo)")
         }
     }
-
-    private func isHTMX(_ request: Request) -> Bool {
-        request.headers[HTTPField.Name("HX-Request")!] != nil
-    }
 }
 
 /// Returns `true` when the request was issued by HTMX (has an `HX-Request`
 /// header). Used by route handlers to opt into fragment responses for
 /// partial swaps instead of full-page redirects.
 public func isHTMXRequest(_ request: Request) -> Bool {
-    request.headers[HTTPField.Name("HX-Request")!] != nil
+    request.headers[.hxRequest] != nil
 }
