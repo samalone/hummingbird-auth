@@ -112,8 +112,12 @@ public struct AuthCallbacks<U: AuthUser>: Sendable {
     /// Where to redirect after logout. Default: "/login"
     public var postLogoutRedirect: String
 
-    /// Called after a new user is registered.
-    public var onUserRegistered: (@Sendable (U) async throws -> Void)?
+    /// Called after a user successfully registers via an invitation.
+    /// Receives the newly-created user and a `ConsumedInvitation` DTO
+    /// snapshot of the invitation that was consumed during registration.
+    /// Apps can read the DTO's metadata to apply invitation-specific side
+    /// effects.
+    public var onUserRegistered: (@Sendable (U, ConsumedInvitation) async throws -> Void)?
 
     /// Called after a user logs in.
     public var onUserLoggedIn: (@Sendable (U) async throws -> Void)?
@@ -121,7 +125,7 @@ public struct AuthCallbacks<U: AuthUser>: Sendable {
     public init(
         postLoginRedirect: @Sendable @escaping (U) -> String = { _ in "/" },
         postLogoutRedirect: String = "/login",
-        onUserRegistered: (@Sendable (U) async throws -> Void)? = nil,
+        onUserRegistered: (@Sendable (U, ConsumedInvitation) async throws -> Void)? = nil,
         onUserLoggedIn: (@Sendable (U) async throws -> Void)? = nil
     ) {
         self.postLoginRedirect = postLoginRedirect

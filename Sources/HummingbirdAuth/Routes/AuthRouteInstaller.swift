@@ -204,8 +204,10 @@ public func installAuthRoutes<Context: AuthRequestContextProtocol>(
                 credentialCreationData: registrationCredential
             )
 
-            try await invitationService.consumeInvitation(invitation, consumedByID: userID)
-            try await config.callbacks.onUserRegistered?(user)
+            let consumedInvitation = try await invitationService.consumeInvitation(
+                invitation, consumedByID: userID
+            )
+            try await config.callbacks.onUserRegistered?(user, consumedInvitation)
 
             // Create session.
             let sessionToken = generateSecureToken()

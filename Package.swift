@@ -26,7 +26,9 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-crypto.git", "2.0.0"..<"5.0.0"),
     ],
     targets: [
-        // Layer 1: Protocols, configuration, and view models — no Fluent dependency
+        // Layer 1: Protocols, configuration, view models, and plain DTOs.
+        // No Fluent dependency — Core is intentionally runtime-framework-free
+        // so it can be imported by non-Fluent callers.
         .target(
             name: "HummingbirdAuthCore",
             dependencies: [
@@ -71,7 +73,10 @@ let package = Package(
             dependencies: [
                 "HummingbirdAuth",
                 "HummingbirdAuthCore",
+                "HummingbirdAuthViews",
                 .product(name: "FluentSQLiteDriver", package: "fluent-sqlite-driver"),
+                .product(name: "HummingbirdTesting", package: "hummingbird"),
+                .product(name: "Plot", package: "Plot"),
             ]
         ),
     ]
