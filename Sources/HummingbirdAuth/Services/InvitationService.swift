@@ -63,10 +63,11 @@ public struct InvitationService: Sendable {
     /// prevent TOCTOU races where two concurrent registrations both consume
     /// the same invitation.
     ///
-    /// Returns the updated (consumed) invitation so callers can pass it to
-    /// registration callbacks without re-fetching.
+    /// Returns a `ConsumedInvitation` DTO describing the now-consumed
+    /// invitation so callers can pass it to registration callbacks without
+    /// re-fetching or projecting the Fluent model themselves.
     @discardableResult
-    public func consumeInvitation(_ invitation: Invitation, consumedByID: UUID) async throws -> Invitation {
+    public func consumeInvitation(_ invitation: Invitation, consumedByID: UUID) async throws -> ConsumedInvitation {
         // Re-fetch with consumed_at == nil filter to narrow the race window.
         guard let fresh = try await Invitation.query(on: db)
             .filter(\.$id == invitation.requireID())
@@ -75,11 +76,20 @@ public struct InvitationService: Sendable {
         else {
             throw InvitationError.alreadyConsumed
         }
-        fresh.consumedAt = Date()
+        let now = Date()
+        fresh.consumedAt = now
         fresh.consumedByID = consumedByID
         try await fresh.save(on: db)
         logger.info("Invitation consumed: \(fresh.token.prefix(8))... by \(consumedByID)")
-        return fresh
+        return ConsumedInvitation(
+            id: try fresh.requireID(),
+            token: fresh.token,
+            email: fresh.email,
+            invitedByID: fresh.invitedByID,
+            expiresAt: fresh.expiresAt,
+            consumedAt: now,
+            consumedByID: consumedByID
+        )
     }
 
 }

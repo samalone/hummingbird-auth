@@ -55,34 +55,44 @@ struct OnUserRegisteredCallbackTests {
     @Test("consumeInvitation returns an invitation with consumedAt set, matching id and token")
     func consumeReturnsUpdatedInvitation() async throws {
         let (fluent, service) = try await makeService()
-        defer { Task { try? await fluent.shutdown() } }
+        do {
+            let originalToken = "test-token-\(UUID().uuidString)"
+            let invitation = Invitation(
+                token: originalToken,
+                email: "invitee@example.com",
+                invitedByID: nil,
+                expiresAt: Date().addingTimeInterval(3600)
+            )
+            try await invitation.save(on: fluent.db())
+            let invitationID = try invitation.requireID()
 
-        let originalToken = "test-token-\(UUID().uuidString)"
-        let invitation = Invitation(
-            token: originalToken,
-            email: "invitee@example.com",
-            invitedByID: nil,
-            expiresAt: Date().addingTimeInterval(3600)
-        )
-        try await invitation.save(on: fluent.db())
-        let invitationID = try invitation.requireID()
+            let userID = try await insertStubUser(email: "consumer@example.com", on: fluent.db())
+            let consumed = try await service.consumeInvitation(invitation, consumedByID: userID)
 
-        let userID = try await insertStubUser(email: "consumer@example.com", on: fluent.db())
-        let consumed = try await service.consumeInvitation(invitation, consumedByID: userID)
-
-        #expect(consumed.id != nil)
-        #expect(try consumed.requireID() == invitationID)
-        #expect(consumed.token == originalToken)
-        #expect(consumed.consumedAt != nil)
-        #expect(consumed.consumedByID == userID)
-        #expect(consumed.email == "invitee@example.com")
+            #expect(consumed.id == invitationID)
+            #expect(consumed.token == originalToken)
+            #expect(consumed.consumedByID == userID)
+            #expect(consumed.email == "invitee@example.com")
+        } catch {
+            try? await fluent.shutdown()
+            throw error
+        }
+        try await fluent.shutdown()
     }
 
     @Test("onUserRegistered callback signature accepts (User, ConsumedInvitation) and receives matching DTO")
     func callbackReceivesInvitation() async throws {
         let (fluent, service) = try await makeService()
-        defer { Task { try? await fluent.shutdown() } }
+        do {
+            try await callbackReceivesInvitationBody(fluent: fluent, service: service)
+        } catch {
+            try? await fluent.shutdown()
+            throw error
+        }
+        try await fluent.shutdown()
+    }
 
+    private func callbackReceivesInvitationBody(fluent: Fluent, service: InvitationService) async throws {
         let originalToken = "cb-token-\(UUID().uuidString)"
         let invitation = Invitation(
             token: originalToken,
@@ -117,21 +127,12 @@ struct OnUserRegisteredCallbackTests {
             await recorder.record(user: user, dto: dto)
         }
 
-        // Simulate the route handler's flow: consume first, translate to
-        // the DTO, then fire the callback with that DTO. This mirrors
-        // what `AuthRouteInstaller` does after a successful registration.
+        // Simulate the route handler's flow: consume first, then fire the
+        // callback with the returned DTO. This mirrors what
+        // `AuthRouteInstaller` does after a successful registration.
         let userID = try await insertStubUser(email: "cb@example.com", on: fluent.db())
         let user = StubUser(displayName: "Callback User", email: "cb@example.com")
-        let consumed = try await service.consumeInvitation(invitation, consumedByID: userID)
-        let dto = ConsumedInvitation(
-            id: try consumed.requireID(),
-            token: consumed.token,
-            email: consumed.email,
-            invitedByID: consumed.invitedByID,
-            expiresAt: consumed.expiresAt,
-            consumedAt: try #require(consumed.consumedAt),
-            consumedByID: try #require(consumed.consumedByID)
-        )
+        let dto = try await service.consumeInvitation(invitation, consumedByID: userID)
         try await callbacks.onUserRegistered?(user, dto)
 
         #expect(await recorder.capturedUserEmail == "cb@example.com")
@@ -158,7 +159,7 @@ struct OnUserRegisteredCallbackTests {
         await addAuthMigrations(to: fluent, userTable: "users")
         // addAuthMigrations depends on a "users" table existing; create a
         // minimal one so the foreign-key references succeed on SQLite.
-        await fluent.migrations.add(CreateStubUsersForCallbackTests())
+        await fluent.migrations.add(CreateTestUsers())
         try await fluent.migrate()
 
         let service = InvitationService(
@@ -167,68 +168,13 @@ struct OnUserRegisteredCallbackTests {
         return (fluent, service)
     }
 
-    /// Insert a minimal user row into the stub `users` table and return its
+    /// Insert a minimal user row into the shared `users` table and return its
     /// id. Used to satisfy the `consumed_by_id` foreign key on the
     /// invitations table when calling `consumeInvitation`.
     private func insertStubUser(email: String, on db: any Database) async throws -> UUID {
         let id = UUID()
-        let user = StubUserModel(id: id, email: email, displayName: "Stub")
+        let user = TestUser(id: id, email: email, displayName: "Stub")
         try await user.save(on: db)
         return id
-    }
-}
-
-/// A Fluent model backing the stub `users` table, used only to satisfy the
-/// foreign-key reference from `auth_invitations.consumed_by_id`.
-final class StubUserModel: Model, @unchecked Sendable {
-    static let schema = "users"
-
-    @ID(key: .id)
-    var id: UUID?
-
-    @Field(key: "email")
-    var email: String
-
-    @Field(key: "display_name")
-    var displayName: String
-
-    @Field(key: "is_admin")
-    var isAdmin: Bool
-
-    @Timestamp(key: "created_at", on: .create)
-    var createdAt: Date?
-
-    init() {
-        self.email = ""
-        self.displayName = ""
-        self.isAdmin = false
-    }
-
-    init(id: UUID, email: String, displayName: String) {
-        self.id = id
-        self.email = email
-        self.displayName = displayName
-        self.isAdmin = false
-    }
-}
-
-/// Minimal users table so the auth migrations that reference it can
-/// be applied cleanly against SQLite.
-struct CreateStubUsersForCallbackTests: AsyncMigration {
-    var name: String { "CreateStubUsersForCallbackTests" }
-
-    func prepare(on database: Database) async throws {
-        try await database.schema("users")
-            .id()
-            .field("email", .string, .required)
-            .field("display_name", .string, .required)
-            .field("is_admin", .bool, .required, .sql(.default(false)))
-            .field("created_at", .datetime)
-            .unique(on: "email")
-            .create()
-    }
-
-    func revert(on database: Database) async throws {
-        try await database.schema("users").delete()
     }
 }
