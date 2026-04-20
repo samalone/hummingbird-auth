@@ -113,12 +113,10 @@ public struct AuthCallbacks<U: AuthUser>: Sendable {
     public var postLogoutRedirect: String
 
     /// Called after a user successfully registers via an invitation.
-    /// Receives the newly-created user *and* a `ConsumedInvitation` DTO
+    /// Receives the newly-created user and a `ConsumedInvitation` DTO
     /// snapshot of the invitation that was consumed during registration.
-    /// Apps can use the DTO's metadata (id, email, invitedByID) to apply
-    /// invitation-specific side effects — e.g. creating a task-share row
-    /// for a share-link invitation. The DTO is a plain Swift struct so
-    /// this callback's signature does not require a Fluent dependency.
+    /// Apps can read the DTO's metadata to apply invitation-specific side
+    /// effects.
     public var onUserRegistered: (@Sendable (U, ConsumedInvitation) async throws -> Void)?
 
     /// Called after a user logs in.

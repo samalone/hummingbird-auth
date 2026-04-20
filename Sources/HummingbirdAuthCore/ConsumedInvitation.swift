@@ -1,14 +1,8 @@
 import Foundation
 
-/// A plain Swift snapshot of an invitation that was just consumed during
-/// registration.
-///
-/// This DTO lets `AuthCallbacks.onUserRegistered` carry the consumed
-/// invitation's metadata without pulling the Fluent `Invitation` model —
-/// and therefore the whole FluentKit dependency — into
-/// `HummingbirdAuthCore`. Core stays runtime-framework-free; the route
-/// installer in `HummingbirdAuth` is responsible for building this DTO
-/// from the Fluent model before invoking the callback.
+/// A plain-Swift snapshot of an invitation that was just consumed during
+/// registration. Passed to `AuthCallbacks.onUserRegistered` so apps can read
+/// the consumed invitation's metadata.
 public struct ConsumedInvitation: Sendable {
     public let id: UUID
     public let token: String
