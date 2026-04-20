@@ -71,7 +71,10 @@ let package = Package(
             dependencies: [
                 "HummingbirdAuth",
                 "HummingbirdAuthCore",
+                "HummingbirdAuthViews",
                 .product(name: "FluentSQLiteDriver", package: "fluent-sqlite-driver"),
+                .product(name: "HummingbirdTesting", package: "hummingbird"),
+                .product(name: "Plot", package: "Plot"),
             ]
         ),
     ]

@@ -46,3 +46,10 @@ public struct AuthRedirectMiddleware<Context: RequestContext>: RouterMiddleware 
         request.headers[HTTPField.Name("HX-Request")!] != nil
     }
 }
+
+/// Returns `true` when the request was issued by HTMX (has an `HX-Request`
+/// header). Used by route handlers to opt into fragment responses for
+/// partial swaps instead of full-page redirects.
+public func isHTMXRequest(_ request: Request) -> Bool {
+    request.headers[HTTPField.Name("HX-Request")!] != nil
+}

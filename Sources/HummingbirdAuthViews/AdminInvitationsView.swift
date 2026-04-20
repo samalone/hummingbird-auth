@@ -7,6 +7,12 @@ import PlotHTMX
 ///
 /// Renders an invitation creation form and a table of existing invitations
 /// with copy URL and delete actions.
+///
+/// HTMX: the create form and each delete form carry `hx-post` /
+/// `hx-target="#admin-invitations-list"` / `hx-swap="outerHTML"` so a
+/// configured server can respond with a re-rendered list fragment via
+/// `AdminInvitationList`. Plain `<form method="POST">` is retained as a
+/// progressive-enhancement fallback.
 public struct AdminInvitationsView: Component {
     public var invitations: [AdminInvitationViewModel]
     public var baseURL: String
@@ -26,12 +32,6 @@ public struct AdminInvitationsView: Component {
         self.csrfToken = csrfToken
         self.pathPrefix = pathPrefix
     }
-
-    private static let dateFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "MMM d, yyyy h:mm a"
-        return f
-    }()
 
     public var body: Component {
         Div {
@@ -66,8 +66,51 @@ public struct AdminInvitationsView: Component {
             }
             .attribute(named: "method", value: "POST")
             .attribute(named: "action", value: "\(pathPrefix)/admin/invitations")
+            .hxPost("\(pathPrefix)/admin/invitations")
+            .hxTarget("#admin-invitations-list")
+            .hxSwap(.outerHTML)
             .class("invite-form")
 
+            AdminInvitationList(
+                invitations: invitations,
+                baseURL: baseURL,
+                csrfToken: csrfToken,
+                pathPrefix: pathPrefix
+            )
+        }
+        .class("auth-admin-invitations-view")
+    }
+}
+
+/// The invitation table on its own, identified by `id="admin-invitations-list"`
+/// so HTMX can swap it after create/delete. Exposed so route handlers can
+/// re-render the list as a fragment.
+public struct AdminInvitationList: Component {
+    public var invitations: [AdminInvitationViewModel]
+    public var baseURL: String
+    public var csrfToken: String?
+    public var pathPrefix: String
+
+    public init(
+        invitations: [AdminInvitationViewModel],
+        baseURL: String,
+        csrfToken: String? = nil,
+        pathPrefix: String = ""
+    ) {
+        self.invitations = invitations
+        self.baseURL = baseURL
+        self.csrfToken = csrfToken
+        self.pathPrefix = pathPrefix
+    }
+
+    private static var dateFormatter: DateFormatter {
+        let f = DateFormatter()
+        f.dateFormat = "MMM d, yyyy h:mm a"
+        return f
+    }
+
+    public var body: Component {
+        Div {
             if !invitations.isEmpty {
                 Element(name: "table") {
                     Element(name: "thead") {
@@ -110,6 +153,9 @@ public struct AdminInvitationsView: Component {
                                         }
                                         .attribute(named: "method", value: "POST")
                                         .attribute(named: "action", value: "\(pathPrefix)/admin/invitations/\(inv.id)/delete")
+                                        .hxPost("\(pathPrefix)/admin/invitations/\(inv.id)/delete")
+                                        .hxTarget("#admin-invitations-list")
+                                        .hxSwap(.outerHTML)
                                     }
                                 }
                             }
@@ -119,6 +165,7 @@ public struct AdminInvitationsView: Component {
                 .class("data-table")
             }
         }
-        .class("auth-admin-invitations-view")
+        .id("admin-invitations-list")
+        .class("admin-invitations-list")
     }
 }

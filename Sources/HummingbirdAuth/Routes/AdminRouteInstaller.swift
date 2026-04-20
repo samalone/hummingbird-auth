@@ -48,13 +48,89 @@ public struct AdminRouteConfiguration: Sendable {
 ///
 /// The `renderUsers` and `renderInvitations` closures receive view model
 /// arrays and should return a `ResponseGenerator` (typically `HTML` pages).
-public func installAdminRoutes<Context: AuthRequestContextProtocol, UsersPage: ResponseGenerator, InvitationsPage: ResponseGenerator>(
+///
+/// Optional `renderUserRow` and `renderInvitationList` closures enable HTMX
+/// partial-swap responses. When provided, write handlers that succeed inspect
+/// the `HX-Request` header and respond with a rendered fragment instead of
+/// a redirect:
+///
+/// - `POST /admin/users/:id/role` — responds with the re-rendered user row
+///   (typically a `<tr>`) for HTMX requests when `renderUserRow` is provided.
+/// - `POST /admin/invitations` and `POST /admin/invitations/:id/delete` —
+///   respond with the re-rendered invitation list for HTMX requests when
+///   `renderInvitationList` is provided.
+///
+/// Masquerade start/end handlers always redirect (full navigation is the
+/// right UX there), even for HTMX requests.
+///
+/// Validation-failure paths (e.g. "At least one admin must remain") keep
+/// the existing flash-and-redirect behavior regardless of HTMX.
+public func installAdminRoutes<
+    Context: AuthRequestContextProtocol,
+    UsersPage: ResponseGenerator,
+    InvitationsPage: ResponseGenerator,
+    UserRowFragment: ResponseGenerator,
+    InvitationListFragment: ResponseGenerator
+>(
+    on router: RouterGroup<AdminContext<Context>>,
+    db: Database,
+    logger: Logger,
+    config: AdminRouteConfiguration,
+    renderUsers: @escaping @Sendable ([AdminUserViewModel], AdminContext<Context>) -> UsersPage,
+    renderInvitations: @escaping @Sendable ([AdminInvitationViewModel], String, AdminContext<Context>) -> InvitationsPage,
+    renderUserRow: (@Sendable (AdminUserViewModel, AdminContext<Context>) -> UserRowFragment)? = nil,
+    renderInvitationList: (@Sendable ([AdminInvitationViewModel], String, AdminContext<Context>) -> InvitationListFragment)? = nil
+) where Context.User: FluentAuthUser {
+    installAdminRoutesImpl(
+        on: router, db: db, logger: logger, config: config,
+        renderUsers: renderUsers, renderInvitations: renderInvitations,
+        renderUserRow: renderUserRow, renderInvitationList: renderInvitationList
+    )
+}
+
+/// Back-compat overload for callers that don't provide HTMX fragment
+/// renderers. Keeps the original two-renderer signature so existing call
+/// sites don't need to spell out `UserRowFragment` / `InvitationListFragment`.
+public func installAdminRoutes<
+    Context: AuthRequestContextProtocol,
+    UsersPage: ResponseGenerator,
+    InvitationsPage: ResponseGenerator
+>(
     on router: RouterGroup<AdminContext<Context>>,
     db: Database,
     logger: Logger,
     config: AdminRouteConfiguration,
     renderUsers: @escaping @Sendable ([AdminUserViewModel], AdminContext<Context>) -> UsersPage,
     renderInvitations: @escaping @Sendable ([AdminInvitationViewModel], String, AdminContext<Context>) -> InvitationsPage
+) where Context.User: FluentAuthUser {
+    // Concrete fragment types are never invoked here because the closures
+    // are `nil`; `Response` is a convenient existentially-available
+    // `ResponseGenerator`.
+    let noUserRow: (@Sendable (AdminUserViewModel, AdminContext<Context>) -> Response)? = nil
+    let noInvitationList: (@Sendable ([AdminInvitationViewModel], String, AdminContext<Context>) -> Response)? = nil
+    installAdminRoutesImpl(
+        on: router, db: db, logger: logger, config: config,
+        renderUsers: renderUsers, renderInvitations: renderInvitations,
+        renderUserRow: noUserRow, renderInvitationList: noInvitationList
+    )
+}
+
+/// Shared implementation of `installAdminRoutes`.
+private func installAdminRoutesImpl<
+    Context: AuthRequestContextProtocol,
+    UsersPage: ResponseGenerator,
+    InvitationsPage: ResponseGenerator,
+    UserRowFragment: ResponseGenerator,
+    InvitationListFragment: ResponseGenerator
+>(
+    on router: RouterGroup<AdminContext<Context>>,
+    db: Database,
+    logger: Logger,
+    config: AdminRouteConfiguration,
+    renderUsers: @escaping @Sendable ([AdminUserViewModel], AdminContext<Context>) -> UsersPage,
+    renderInvitations: @escaping @Sendable ([AdminInvitationViewModel], String, AdminContext<Context>) -> InvitationsPage,
+    renderUserRow: (@Sendable (AdminUserViewModel, AdminContext<Context>) -> UserRowFragment)?,
+    renderInvitationList: (@Sendable ([AdminInvitationViewModel], String, AdminContext<Context>) -> InvitationListFragment)?
 ) where Context.User: FluentAuthUser {
 
     // MARK: - User Management
@@ -126,6 +202,19 @@ public func installAdminRoutes<Context: AuthRequestContextProtocol, UsersPage: R
         user.isAdmin = makeAdmin
         try await user.save(on: db)
 
+        // HTMX partial swap: return the re-rendered user row if the caller
+        // provided a fragment renderer and the request is from HTMX.
+        if let renderUserRow, isHTMXRequest(request) {
+            let vm = AdminUserViewModel(
+                id: user.id!,
+                displayName: user.displayName,
+                email: user.email,
+                isAdmin: user.isAdmin,
+                createdAt: user.createdAt
+            )
+            return try renderUserRow(vm, context).response(from: request, context: context)
+        }
+
         return .redirect(to: "\(context.mountPath)/admin/users", type: .normal)
     }
 
@@ -187,21 +276,7 @@ public func installAdminRoutes<Context: AuthRequestContextProtocol, UsersPage: R
     // MARK: - Invitation Management
 
     router.get("/admin/invitations") { request, context -> Response in
-        let invitations = try await Invitation.query(on: db)
-            .sort(\.$createdAt, .descending)
-            .all()
-
-        let viewModels = invitations.map { inv in
-            AdminInvitationViewModel(
-                id: inv.id!,
-                email: inv.email,
-                token: inv.token,
-                expiresAt: inv.expiresAt,
-                createdAt: inv.createdAt,
-                isConsumed: inv.consumedAt != nil
-            )
-        }
-
+        let viewModels = try await fetchInvitationViewModels(db: db)
         return try renderInvitations(viewModels, config.baseURL, context).response(from: request, context: context)
     }
 
@@ -224,6 +299,13 @@ public func installAdminRoutes<Context: AuthRequestContextProtocol, UsersPage: R
             invitedByID: context.realUserID ?? context.user.id
         )
 
+        // HTMX partial swap: return the re-rendered invitation list.
+        if let renderInvitationList, isHTMXRequest(request) {
+            let viewModels = try await fetchInvitationViewModels(db: db)
+            return try renderInvitationList(viewModels, config.baseURL, context)
+                .response(from: request, context: context)
+        }
+
         return .redirect(to: "\(context.mountPath)/admin/invitations", type: .normal)
     }
 
@@ -241,6 +323,33 @@ public func installAdminRoutes<Context: AuthRequestContextProtocol, UsersPage: R
             throw HTTPError(.badRequest, message: "Cannot delete a consumed invitation")
         }
         try await invitation.delete(on: db)
+
+        // HTMX partial swap: return the re-rendered invitation list.
+        if let renderInvitationList, isHTMXRequest(request) {
+            let viewModels = try await fetchInvitationViewModels(db: db)
+            return try renderInvitationList(viewModels, config.baseURL, context)
+                .response(from: request, context: context)
+        }
+
         return .redirect(to: "\(context.mountPath)/admin/invitations", type: .normal)
+    }
+}
+
+/// Fetch all invitations and map them to view models, ordered newest-first.
+/// Shared by the index handler and the HTMX partial-swap responses.
+private func fetchInvitationViewModels(db: Database) async throws -> [AdminInvitationViewModel] {
+    let invitations = try await Invitation.query(on: db)
+        .sort(\.$createdAt, .descending)
+        .all()
+
+    return invitations.map { inv in
+        AdminInvitationViewModel(
+            id: inv.id!,
+            email: inv.email,
+            token: inv.token,
+            expiresAt: inv.expiresAt,
+            createdAt: inv.createdAt,
+            isConsumed: inv.consumedAt != nil
+        )
     }
 }
