@@ -3,16 +3,22 @@ import HummingbirdAuthCore
 import Plot
 import PlotHTMX
 
+/// Shared date formatter for admin invitation rows.
+///
+/// `DateFormatter` is thread-safe for read-only use after configuration, so a
+/// single shared instance is safe to reuse across renders.
+private let adminInvitationDateFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.dateFormat = "MMM d, yyyy h:mm a"
+    return f
+}()
+
 /// Embeddable admin invitation management component.
 ///
 /// Renders an invitation creation form and a table of existing invitations
-/// with copy URL and delete actions.
-///
-/// HTMX: the create form and each delete form carry `hx-post` /
-/// `hx-target="#admin-invitations-list"` / `hx-swap="outerHTML"` so a
-/// configured server can respond with a re-rendered list fragment via
-/// `AdminInvitationList`. Plain `<form method="POST">` is retained as a
-/// progressive-enhancement fallback.
+/// with copy URL and delete actions. The invitation table is wrapped in
+/// `AdminInvitationList` (id `admin-invitations-list`) so write handlers can
+/// respond with that fragment for HTMX partial swaps.
 public struct AdminInvitationsView: Component {
     public var invitations: [AdminInvitationViewModel]
     public var baseURL: String
@@ -103,12 +109,6 @@ public struct AdminInvitationList: Component {
         self.pathPrefix = pathPrefix
     }
 
-    private static var dateFormatter: DateFormatter {
-        let f = DateFormatter()
-        f.dateFormat = "MMM d, yyyy h:mm a"
-        return f
-    }
-
     public var body: Component {
         Div {
             if !invitations.isEmpty {
@@ -137,7 +137,7 @@ public struct AdminInvitationList: Component {
                                         .on("click", "navigator.clipboard.writeText('\(url)');this.textContent='Copied!'")
                                 }
                                 Element(name: "td") {
-                                    Text(Self.dateFormatter.string(from: inv.expiresAt))
+                                    Text(adminInvitationDateFormatter.string(from: inv.expiresAt))
                                 }
                                 Element(name: "td") {
                                     Text(inv.isConsumed ? "Used" : "Pending")

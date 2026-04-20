@@ -3,6 +3,16 @@ import HummingbirdAuthCore
 import Plot
 import PlotHTMX
 
+/// Shared date formatter for admin user rows.
+///
+/// `DateFormatter` is thread-safe for read-only use after configuration, so a
+/// single shared instance is safe to reuse across renders.
+private let adminUserRowDateFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.dateFormat = "MMM d, yyyy"
+    return f
+}()
+
 /// Embeddable admin user list component.
 ///
 /// Renders a table of users with role management and masquerade buttons.
@@ -14,15 +24,8 @@ import PlotHTMX
 ///   account, so the system always has at least one. The backend should
 ///   enforce the same invariant independently.
 ///
-/// HTMX: each row has `id="user-row-{uuid}"` and the role-change /
-/// masquerade forms are annotated with `hx-post`, `hx-target`, and
-/// `hx-swap="outerHTML"` so a configured server can respond with a
-/// re-rendered row fragment. Plain `<form method="POST">` is kept as
-/// a progressive-enhancement fallback.
-///
-/// The optional `preamble` lets embedding apps inject custom content
-/// (such as a "create test user" form) above the user table without
-/// forking the view.
+/// The optional `preamble` lets embedding apps inject custom content above
+/// the user table.
 public struct AdminUsersView<Preamble: Component>: Component {
     public var users: [AdminUserViewModel]
     public var csrfToken: String?
@@ -46,12 +49,6 @@ public struct AdminUsersView<Preamble: Component>: Component {
         self.pathPrefix = pathPrefix
         self.currentUserID = currentUserID
         self.preamble = preamble()
-    }
-
-    private static var dateFormatter: DateFormatter {
-        let f = DateFormatter()
-        f.dateFormat = "MMM d, yyyy"
-        return f
     }
 
     public var body: Component {
@@ -116,12 +113,6 @@ public struct AdminUserRow: Component {
         self.onlyOneAdmin = onlyOneAdmin
     }
 
-    private static var dateFormatter: DateFormatter {
-        let f = DateFormatter()
-        f.dateFormat = "MMM d, yyyy"
-        return f
-    }
-
     public var body: Component {
         let isSelf = currentUserID != nil && user.id == currentUserID
         let demotingLastAdmin = user.isAdmin && onlyOneAdmin
@@ -137,7 +128,7 @@ public struct AdminUserRow: Component {
                 .class(user.isAdmin ? "role-badge role-admin" : "role-badge")
             }
             Element(name: "td") {
-                Text(user.createdAt.map { Self.dateFormatter.string(from: $0) } ?? "")
+                Text(user.createdAt.map { adminUserRowDateFormatter.string(from: $0) } ?? "")
             }
             Element(name: "td") {
                 Div {
