@@ -14,67 +14,6 @@ import Testing
 @testable import HummingbirdAuthCore
 @testable import HummingbirdAuthViews
 
-// MARK: - Test user model
-
-/// Minimal Fluent-backed user model used only by these tests.
-final class TestUser: Model, AuthUser, @unchecked Sendable {
-    static let schema = "users"
-
-    @ID(key: .id)
-    var id: UUID?
-
-    @Field(key: "email")
-    var email: String
-
-    @Field(key: "display_name")
-    var displayName: String
-
-    @Field(key: "is_admin")
-    var isAdmin: Bool
-
-    @Timestamp(key: "created_at", on: .create)
-    var createdAt: Date?
-
-    init() {
-        self.email = ""
-        self.displayName = ""
-        self.isAdmin = false
-    }
-
-    init(displayName: String, email: String) {
-        self.email = email
-        self.displayName = displayName
-        self.isAdmin = false
-    }
-
-    init(email: String, displayName: String, isAdmin: Bool) {
-        self.email = email
-        self.displayName = displayName
-        self.isAdmin = isAdmin
-    }
-}
-
-extension TestUser: FluentAuthUser {
-    static let emailFieldKey: FieldKey = "email"
-}
-
-struct CreateTestUsers: AsyncMigration {
-    func prepare(on database: Database) async throws {
-        try await database.schema(TestUser.schema)
-            .id()
-            .field("email", .string, .required)
-            .field("display_name", .string, .required)
-            .field("is_admin", .bool, .required, .sql(.default(false)))
-            .field("created_at", .datetime)
-            .unique(on: "email")
-            .create()
-    }
-
-    func revert(on database: Database) async throws {
-        try await database.schema(TestUser.schema).delete()
-    }
-}
-
 // MARK: - Test context
 
 struct TestContext: AuthRequestContextProtocol {
@@ -198,8 +137,6 @@ private func withAdminApp(
     try await fluent.shutdown()
 }
 
-private let hxRequestHeader = HTTPField.Name("HX-Request")!
-
 // MARK: - Route tests
 
 @Suite("Admin route HTMX partials")
@@ -216,7 +153,7 @@ struct AdminRouteHTMXTests {
                 headers: [
                     .cookie: "\(SessionConfiguration.cookieName)=\(fx.sessionToken)",
                     .contentType: "application/x-www-form-urlencoded",
-                    hxRequestHeader: "true",
+                    .hxRequest: "true",
                 ],
                 body: ByteBuffer(string: body)
             ) { response in
@@ -264,7 +201,7 @@ struct AdminRouteHTMXTests {
                 headers: [
                     .cookie: "\(SessionConfiguration.cookieName)=\(fx.sessionToken)",
                     .contentType: "application/x-www-form-urlencoded",
-                    hxRequestHeader: "true",
+                    .hxRequest: "true",
                 ],
                 body: ByteBuffer(string: body)
             ) { response in
