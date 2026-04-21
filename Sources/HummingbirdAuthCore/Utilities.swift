@@ -62,7 +62,6 @@ public let csrfFormFieldName = "csrf_token"
 
 /// HTTP request header name that carries the CSRF token for non-form
 /// requests (JSON, HTMX, fetch, XHR, multipart). Single source of truth
-/// for both `CSRFMiddleware` (which reads the header) and the
-/// `hxCSRFHeaders` helper (which emits the JSON payload for HTMX's
-/// `hx-headers` attribute).
+/// for both `CSRFMiddleware` (which reads the header) and
+/// `CSRFHTMXScript` (which injects the header on every HTMX request).
 public let csrfHeaderName = "X-CSRF-Token"
