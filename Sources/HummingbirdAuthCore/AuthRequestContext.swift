@@ -49,6 +49,46 @@ extension AuthRequestContextProtocol {
     public var mountPath: String { "" }
 }
 
+/// Marker refinement of `AuthRequestContextProtocol` that guarantees the
+/// `CSRFMiddleware` has been installed and that the context carries the
+/// per-request state it needs.
+///
+/// Route installers that mount state-changing endpoints
+/// (`installAuthRoutes`, `installAdminRoutes`, `installProfileRoutes`,
+/// `installOAuthRoutes`) constrain their `Context` parameter to
+/// `CSRFProtectedContext`. Apps that don't install `CSRFMiddleware` receive
+/// a compile error rather than a silently-insecure default.
+///
+/// ### Implementing the conformance
+///
+/// Add the CSRF stored properties to your app's context struct:
+///
+/// ```swift
+/// struct AppContext: CSRFProtectedContext {
+///     typealias User = AppUser
+///     var coreContext: CoreRequestContextStorage
+///     var user: AppUser?
+///     var flashMessages: [FlashMessage] = []
+///     var masqueradingAs: String?
+///     var realUserID: UUID?
+///     var csrfToken: String?
+///     var csrfSkipped: Bool = false
+///
+///     init(source: ApplicationRequestContextSource) {
+///         self.coreContext = .init(source: source)
+///     }
+/// }
+/// ```
+///
+/// The `SkipCSRF` middleware sets `csrfSkipped = true` so `CSRFMiddleware`
+/// honors the opt-out.
+public protocol CSRFProtectedContext: AuthRequestContextProtocol {
+    /// Opt-out flag set by the `SkipCSRF` middleware. `CSRFMiddleware`
+    /// honors this and skips validation for routes that genuinely don't
+    /// need it (webhooks, metrics endpoints, etc.). Use sparingly.
+    var csrfSkipped: Bool { get set }
+}
+
 /// Child context for routes requiring an authenticated user.
 public struct AuthenticatedContext<Parent: AuthRequestContextProtocol>: ChildRequestContext, Sendable {
     public typealias ParentContext = Parent

@@ -16,7 +16,7 @@ import Testing
 
 // MARK: - Test context
 
-struct TestContext: AuthRequestContextProtocol {
+struct TestContext: CSRFProtectedContext {
     typealias User = TestUser
 
     var coreContext: CoreRequestContextStorage
@@ -25,6 +25,7 @@ struct TestContext: AuthRequestContextProtocol {
     var masqueradingAs: String?
     var realUserID: UUID?
     var csrfToken: String?
+    var csrfSkipped: Bool = false
 
     init(source: ApplicationRequestContextSource) {
         self.coreContext = .init(source: source)

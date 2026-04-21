@@ -43,8 +43,7 @@ public struct AdminInvitationsView: Component {
         Div {
             // Create form
             Element(name: "form") {
-                Node.input(.type(.hidden), .name("csrf_token"),
-                           .value(csrfToken ?? ""))
+                CSRFField(csrfToken)
                 Div {
                     Div {
                         Element(name: "label") { Text("Email (optional)") }
@@ -145,8 +144,7 @@ public struct AdminInvitationList: Component {
                                 Element(name: "td") {
                                     if !inv.isConsumed {
                                         Element(name: "form") {
-                                            Node.input(.type(.hidden), .name("csrf_token"),
-                                                       .value(csrfToken ?? ""))
+                                            CSRFField(csrfToken)
                                             Element(name: "button") { Text("Delete") }
                                                 .type("submit")
                                                 .class("button small danger")

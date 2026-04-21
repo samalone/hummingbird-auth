@@ -7,7 +7,6 @@ import Logging
 struct ProfileInput: Decodable {
     var display_name: String
     var email: String
-    var csrf_token: String
 }
 
 /// Install profile routes.
@@ -23,7 +22,7 @@ struct ProfileInput: Decodable {
 /// The `render` closure receives a `ProfileViewModel` and the request context,
 /// and should return a `ResponseGenerator` (typically an `HTML` page wrapping
 /// a `ProfileView` from HummingbirdAuthViews in your app's layout).
-public func installProfileRoutes<Context: AuthRequestContextProtocol, Page: ResponseGenerator>(
+public func installProfileRoutes<Context: CSRFProtectedContext, Page: ResponseGenerator>(
     on router: RouterGroup<AuthenticatedContext<Context>>,
     db: Database,
     render: @escaping @Sendable (ProfileViewModel, AuthenticatedContext<Context>) -> Page
@@ -42,7 +41,6 @@ public func installProfileRoutes<Context: AuthRequestContextProtocol, Page: Resp
         let input = try await URLEncodedFormDecoder().decode(
             ProfileInput.self, from: request, context: context
         )
-        try validateCSRFToken(submitted: input.csrf_token, expected: context.csrfToken)
 
         guard var user = try await Context.User.find(context.user.id!, on: db) else {
             throw HTTPError(.notFound)

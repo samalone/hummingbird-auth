@@ -5,14 +5,11 @@ import HummingbirdAuthCore
 import Logging
 
 // Decodable types must be at module scope in Swift 6 (not nested in generic closures).
-struct RoleInput: Decodable { var role: String; var csrf_token: String }
-struct MasqueradeInput: Decodable { var csrf_token: String }
+struct RoleInput: Decodable { var role: String }
 struct InviteInput: Decodable {
     var email: String?
     var expires_days: Int?
-    var csrf_token: String
 }
-struct DeleteInput: Decodable { var csrf_token: String }
 
 /// Configuration for admin routes.
 public struct AdminRouteConfiguration: Sendable {
@@ -66,7 +63,7 @@ public struct AdminRouteConfiguration: Sendable {
 /// Validation-failure paths (e.g. "At least one admin must remain") keep
 /// the existing flash-and-redirect behavior regardless of HTMX.
 public func installAdminRoutes<
-    Context: AuthRequestContextProtocol,
+    Context: CSRFProtectedContext,
     UsersPage: ResponseGenerator,
     InvitationsPage: ResponseGenerator,
     UserRowFragment: ResponseGenerator,
@@ -90,7 +87,7 @@ public func installAdminRoutes<
 
 /// Overload for callers that do not supply HTMX fragment renderers.
 public func installAdminRoutes<
-    Context: AuthRequestContextProtocol,
+    Context: CSRFProtectedContext,
     UsersPage: ResponseGenerator,
     InvitationsPage: ResponseGenerator
 >(
@@ -112,7 +109,7 @@ public func installAdminRoutes<
 
 /// Shared implementation of `installAdminRoutes`.
 private func installAdminRoutesImpl<
-    Context: AuthRequestContextProtocol,
+    Context: CSRFProtectedContext,
     UsersPage: ResponseGenerator,
     InvitationsPage: ResponseGenerator,
     UserRowFragment: ResponseGenerator,
@@ -148,8 +145,6 @@ private func installAdminRoutesImpl<
         let input = try await URLEncodedFormDecoder().decode(
             RoleInput.self, from: request, context: context
         )
-        try validateCSRFToken(submitted: input.csrf_token, expected: context.csrfToken)
-
         // For validation failures that are user-visible (not developer
         // errors like CSRF or not-found), attach a flash message and
         // redirect back to /admin/users so browsers see an HTML page
@@ -202,11 +197,6 @@ private func installAdminRoutesImpl<
     // MARK: - Masquerade
 
     router.post("/admin/users/:id/masquerade") { request, context -> Response in
-        let input = try await URLEncodedFormDecoder().decode(
-            MasqueradeInput.self, from: request, context: context
-        )
-        try validateCSRFToken(submitted: input.csrf_token, expected: context.csrfToken)
-
         guard let targetID = context.parameters.get("id", as: UUID.self),
               let _ = try await Context.User.find(targetID, on: db) else {
             throw HTTPError(.notFound)
@@ -233,11 +223,6 @@ private func installAdminRoutesImpl<
     }
 
     router.post("/admin/masquerade/end") { request, context -> Response in
-        let input = try await URLEncodedFormDecoder().decode(
-            MasqueradeInput.self, from: request, context: context
-        )
-        try validateCSRFToken(submitted: input.csrf_token, expected: context.csrfToken)
-
         guard let token = request.cookies[SessionConfiguration.cookieName]?.value,
               let session = try await AuthSession.query(on: db)
                 .filter(\.$token == token)
@@ -265,8 +250,6 @@ private func installAdminRoutesImpl<
         let input = try await URLEncodedFormDecoder().decode(
             InviteInput.self, from: request, context: context
         )
-        try validateCSRFToken(submitted: input.csrf_token, expected: context.csrfToken)
-
         let email = input.email?.trimmingCharacters(in: .whitespacesAndNewlines)
         let invitationService = InvitationService(
             db: db, logger: logger,
@@ -294,11 +277,6 @@ private func installAdminRoutesImpl<
     }
 
     router.post("/admin/invitations/:id/delete") { request, context -> Response in
-        let input = try await URLEncodedFormDecoder().decode(
-            DeleteInput.self, from: request, context: context
-        )
-        try validateCSRFToken(submitted: input.csrf_token, expected: context.csrfToken)
-
         guard let id = context.parameters.get("id", as: UUID.self),
               let invitation = try await Invitation.find(id, on: db) else {
             throw HTTPError(.notFound)

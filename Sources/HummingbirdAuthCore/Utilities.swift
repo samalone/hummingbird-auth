@@ -52,17 +52,17 @@ public enum Base64URLError: Error {
     case invalidEncoding
 }
 
-public enum CSRFError: Error {
-    case missingToken
-    case invalidToken
-}
+// MARK: - CSRF token constants
 
-/// Validate that a submitted CSRF token matches the session's CSRF token.
-public func validateCSRFToken(submitted: String?, expected: String?) throws {
-    guard let expected = expected else {
-        throw CSRFError.missingToken
-    }
-    guard let submitted = submitted, submitted == expected else {
-        throw CSRFError.invalidToken
-    }
-}
+/// Form field name that carries the CSRF token in
+/// `application/x-www-form-urlencoded` bodies. Single source of truth for
+/// both `CSRFMiddleware` (which reads it from the form body) and the
+/// `CSRFField` view component (which emits the hidden input).
+public let csrfFormFieldName = "csrf_token"
+
+/// HTTP request header name that carries the CSRF token for non-form
+/// requests (JSON, HTMX, fetch, XHR, multipart). Single source of truth
+/// for both `CSRFMiddleware` (which reads the header) and the
+/// `hxCSRFHeaders` helper (which emits the JSON payload for HTMX's
+/// `hx-headers` attribute).
+public let csrfHeaderName = "X-CSRF-Token"
