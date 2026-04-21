@@ -1,4 +1,3 @@
-import Foundation
 import HummingbirdAuthCore
 import Plot
 
@@ -37,28 +36,19 @@ public struct CSRFField: Component {
     }
 }
 
-/// Build the JSON object that HTMX's `hx-headers` attribute expects in
-/// order to add an `X-CSRF-Token` header to a request.
+/// `<meta name="csrf-token" content="...">` tag used by `CSRFHTMXScript`
+/// and by app-side JavaScript to locate the current session's CSRF token.
 ///
-/// Use this on HTMX elements that trigger non-GET requests which don't
-/// naturally carry a form body (`hx-post`, `hx-delete`, `hx-patch` with
-/// JSON, etc.):
+/// Include this in the `<head>` of any authenticated page that will issue
+/// non-GET requests via HTMX, `fetch()`, or XHR.
 ///
 /// ```swift
-/// Element(name: "button") { Text("Delete") }
-///     .attribute(named: "hx-delete", value: "/items/\(id)")
-///     .attribute(named: "hx-headers", value: hxCSRFHeaders(context.csrfToken))
+/// .head(
+///     ...
+///     csrfMetaTag(context.csrfToken),
+///     .raw(CSRFHTMXScript.scriptTag)
+/// )
 /// ```
-///
-/// Returns an empty object (`{}`) when `csrfToken` is nil — HTMX will
-/// treat that as "no extra headers" rather than failing, and
-/// `CSRFMiddleware` will reject the resulting request if it's a
-/// state-changing, cookie-authenticated request.
-public func hxCSRFHeaders(_ csrfToken: String?) -> String {
-    guard let csrfToken else { return "{}" }
-    guard let data = try? JSONSerialization.data(withJSONObject: [csrfHeaderName: csrfToken]),
-          let json = String(data: data, encoding: .utf8) else {
-        return "{}"
-    }
-    return json
+public func csrfMetaTag(_ csrfToken: String?) -> Node<HTML.HeadContext> {
+    .meta(.name("csrf-token"), .content(csrfToken ?? ""))
 }

@@ -222,13 +222,17 @@ Element(name: "form") {
 .attribute(named: "action", value: "/some/endpoint")
 ```
 
-For HTMX-driven mutations that don't carry a form body (`hx-post` / `hx-delete` / `hx-patch` with JSON), use the `hxCSRFHeaders` helper:
+For HTMX-driven mutations that don't carry a form body (`hx-post` / `hx-delete` / `hx-patch` with JSON), include `CSRFMetaTag` and `CSRFHTMXScript.scriptTag` in your layout's `<head>` once. The script registers an `htmx:configRequest` listener that adds `X-CSRF-Token` to every outgoing HTMX request — including elements added dynamically — reading the token from the meta tag:
 
 ```swift
-Element(name: "button") { Text("Delete") }
-    .attribute(named: "hx-delete", value: "/items/\(id)")
-    .attribute(named: "hx-headers", value: hxCSRFHeaders(context.csrfToken))
+.head(
+    .title(title),
+    csrfMetaTag(context.csrfToken),
+    .raw(CSRFHTMXScript.scriptTag)
+)
 ```
+
+Plain-JS `fetch()` callers that perform mutations can read the same meta tag and set the `X-CSRF-Token` header themselves.
 
 ### Opting out
 
