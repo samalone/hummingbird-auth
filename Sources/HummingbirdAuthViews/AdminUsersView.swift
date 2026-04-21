@@ -133,8 +133,7 @@ public struct AdminUserRow: Component {
             Element(name: "td") {
                 Div {
                     Element(name: "form") {
-                        Node.input(.type(.hidden), .name("csrf_token"),
-                                   .value(csrfToken ?? ""))
+                        CSRFField(csrfToken)
                         Node.input(.type(.hidden), .name("role"),
                                    .value(user.isAdmin ? "user" : "admin"))
                         let roleButton = Element(name: "button") {
@@ -159,8 +158,7 @@ public struct AdminUserRow: Component {
 
                     if !isSelf {
                         Element(name: "form") {
-                            Node.input(.type(.hidden), .name("csrf_token"),
-                                       .value(csrfToken ?? ""))
+                            CSRFField(csrfToken)
                             Element(name: "button") { Text("Masquerade") }
                                 .type("submit")
                                 .class("button small secondary")
