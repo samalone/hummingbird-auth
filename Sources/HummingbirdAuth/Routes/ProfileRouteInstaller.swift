@@ -7,7 +7,6 @@ import Logging
 struct ProfileInput: Decodable {
     var display_name: String
     var email: String
-    var csrf_token: String
 }
 
 /// Install profile routes.
@@ -42,7 +41,6 @@ public func installProfileRoutes<Context: CSRFProtectedContext, Page: ResponseGe
         let input = try await URLEncodedFormDecoder().decode(
             ProfileInput.self, from: request, context: context
         )
-        try validateCSRFToken(submitted: input.csrf_token, expected: context.csrfToken)
 
         guard var user = try await Context.User.find(context.user.id!, on: db) else {
             throw HTTPError(.notFound)

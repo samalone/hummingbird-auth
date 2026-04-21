@@ -52,13 +52,19 @@ public enum Base64URLError: Error {
     case invalidEncoding
 }
 
-public enum CSRFError: Error {
+enum CSRFError: Error {
     case missingToken
     case invalidToken
 }
 
 /// Validate that a submitted CSRF token matches the session's CSRF token.
-public func validateCSRFToken(submitted: String?, expected: String?) throws {
+///
+/// Retained as an internal helper for the library's own (now-redundant)
+/// legacy call sites and as a hook for targeted tests. Apps should not
+/// use this directly — install `CSRFMiddleware` instead, which handles
+/// CSRF consistently across every state-changing cookie-authenticated
+/// route.
+func validateCSRFToken(submitted: String?, expected: String?) throws {
     guard let expected = expected else {
         throw CSRFError.missingToken
     }
