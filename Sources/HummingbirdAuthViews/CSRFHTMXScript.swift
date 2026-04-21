@@ -1,3 +1,5 @@
+import HummingbirdAuthCore
+
 /// Adds the `X-CSRF-Token` header to every HTMX request automatically.
 ///
 /// Uses HTMX's `htmx:configRequest` event — the canonical extension point
@@ -27,7 +29,7 @@ public enum CSRFHTMXScript {
             var meta = document.querySelector('meta[name="csrf-token"]');
             var token = meta ? meta.getAttribute('content') || '' : '';
             if (token) {
-                e.detail.headers['X-CSRF-Token'] = token;
+                e.detail.headers['\(csrfHeaderName)'] = token;
             }
         });
     })();
@@ -35,7 +37,5 @@ public enum CSRFHTMXScript {
 
     /// A `<script>` tag containing the listener.
     /// Use with `.raw()` in Plot's Node DSL.
-    public static var scriptTag: String {
-        "<script>\(source)</script>"
-    }
+    public static let scriptTag: String = "<script>\(source)</script>"
 }
