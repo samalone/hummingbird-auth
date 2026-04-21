@@ -5,10 +5,6 @@ import HummingbirdAuthCore
 import Logging
 
 // Decodable types must be at module scope in Swift 6 (not nested in generic closures).
-//
-// The `csrf_token` form field is consumed by `CSRFMiddleware` before these
-// decoders run. The decoders are fed the re-attached body so any stray
-// `csrf_token` field in the form body is simply ignored by the decoder.
 struct RoleInput: Decodable { var role: String }
 struct InviteInput: Decodable {
     var email: String?

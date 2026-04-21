@@ -25,7 +25,6 @@ struct CSRFTestContext: CSRFProtectedContext {
     var masqueradingAs: String?
     var realUserID: UUID?
     var csrfToken: String?
-    var csrfValidated: Bool = false
     var csrfSkipped: Bool = false
 
     init(source: ApplicationRequestContextSource) {
@@ -89,7 +88,6 @@ private func withCSRFApp(
             .add(middleware: SkipCSRF<CSRFTestContext>())
             .add(middleware: CSRFMiddleware<CSRFTestContext>())
         skipGroup.post("/webhook") { request, context -> Response in
-            #expect(context.csrfValidated)
             return Response(
                 status: .ok, headers: [:],
                 body: .init(byteBuffer: ByteBuffer(string: "WEBHOOK_OK"))
@@ -98,15 +96,13 @@ private func withCSRFApp(
     }
 
     let protected = router.group("").add(middleware: CSRFMiddleware<CSRFTestContext>())
-    protected.get("/ping") { _, context -> Response in
-        #expect(context.csrfValidated)
+    protected.get("/ping") { _, _ -> Response in
         return Response(
             status: .ok, headers: [:],
             body: .init(byteBuffer: ByteBuffer(string: "PONG"))
         )
     }
-    protected.post("/echo") { request, context -> Response in
-        #expect(context.csrfValidated)
+    protected.post("/echo") { request, _ -> Response in
         var req = request
         let collected = try await req.collectBody(upTo: 1024 * 1024)
         return Response(

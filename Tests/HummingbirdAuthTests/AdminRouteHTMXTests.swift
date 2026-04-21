@@ -25,7 +25,6 @@ struct TestContext: CSRFProtectedContext {
     var masqueradingAs: String?
     var realUserID: UUID?
     var csrfToken: String?
-    var csrfValidated: Bool = false
     var csrfSkipped: Bool = false
 
     init(source: ApplicationRequestContextSource) {

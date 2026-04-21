@@ -9,7 +9,7 @@ extension HTTPField.Name {
     /// The `X-CSRF-Token` header used by `CSRFMiddleware` for HTMX /
     /// fetch / XHR / JSON / multipart requests that can't (or don't want
     /// to) carry the token in a form body.
-    public static let csrfToken = HTTPField.Name("X-CSRF-Token")!
+    public static let csrfToken = HTTPField.Name(csrfHeaderName)!
 }
 
 /// Enforces CSRF protection for state-changing, cookie-authenticated requests.
@@ -35,9 +35,9 @@ extension HTTPField.Name {
 /// ### Where to read the token
 ///
 /// - `application/x-www-form-urlencoded` bodies: read `csrf_token` from
-///   the collected, URL-decoded form body. The collected body is
-///   re-attached to the request so downstream handlers can decode it
-///   normally.
+///   the collected, URL-decoded form body. Hummingbird's
+///   `collectBody(upTo:)` buffers the body back onto `request.body`, so
+///   downstream `URLEncodedFormDecoder` calls can still decode it.
 /// - Any other content type (including `multipart/form-data`, JSON,
 ///   HTMX / fetch / XHR requests): require the `X-CSRF-Token` header.
 ///
@@ -61,10 +61,12 @@ public struct CSRFMiddleware<Context: CSRFProtectedContext>: RouterMiddleware {
     private let maxFormBodySize: Int
 
     /// Name of the form field that carries the CSRF token.
-    public static var formFieldName: String { "csrf_token" }
+    /// Kept as a public constant for caller reference; the internal form
+    /// decoder hard-codes the name via the `CSRFEnvelope` property below.
+    public static var formFieldName: String { csrfFormFieldName }
 
     /// Name of the HTTP request header that carries the CSRF token.
-    public static var headerName: String { "X-CSRF-Token" }
+    public static var headerName: String { csrfHeaderName }
 
     public init(maxFormBodySize: Int = 1024 * 1024) {
         self.maxFormBodySize = maxFormBodySize
@@ -76,18 +78,15 @@ public struct CSRFMiddleware<Context: CSRFProtectedContext>: RouterMiddleware {
         next: (Request, Context) async throws -> Response
     ) async throws -> Response {
         var request = request
-        var context = context
 
         // Explicit opt-out (SkipCSRF middleware).
         if context.csrfSkipped {
-            context.csrfValidated = true
             return try await next(request, context)
         }
 
         // Safe methods never mutate state.
         switch request.method {
         case .get, .head, .options:
-            context.csrfValidated = true
             return try await next(request, context)
         default:
             break
@@ -97,7 +96,6 @@ public struct CSRFMiddleware<Context: CSRFProtectedContext>: RouterMiddleware {
         // forge against. The route, if it requires authentication, will
         // reject on its own.
         if request.cookies[SessionConfiguration.cookieName] == nil {
-            context.csrfValidated = true
             return try await next(request, context)
         }
 
@@ -108,8 +106,7 @@ public struct CSRFMiddleware<Context: CSRFProtectedContext>: RouterMiddleware {
         // apps might arrive with both. A bearer token by itself is enough
         // to skip CSRF — the token is the authenticator.
         if let authHeader = request.headers[.authorization],
-           authHeader.lowercased().hasPrefix("bearer ") {
-            context.csrfValidated = true
+           authHeader.hasCaseInsensitiveASCIIPrefix("bearer ") {
             return try await next(request, context)
         }
 
@@ -122,13 +119,20 @@ public struct CSRFMiddleware<Context: CSRFProtectedContext>: RouterMiddleware {
             throw HTTPError(.forbidden, message: "Invalid CSRF token")
         }
 
-        context.csrfValidated = true
         return try await next(request, context)
     }
 
+    /// Envelope used to decode the form body for just the CSRF field.
+    /// Additional form fields present in the body are ignored.
+    private struct CSRFEnvelope: Decodable {
+        // swiftlint:disable:next identifier_name
+        var csrf_token: String?
+    }
+
     /// Pull a token out of either the `X-CSRF-Token` header or the
-    /// form body. For form bodies the collected bytes are re-attached
-    /// to the request so downstream handlers can decode as usual.
+    /// form body. For form-urlencoded bodies `collectBody(upTo:)` buffers
+    /// the body back onto `request.body`, so downstream decoders can still
+    /// read it.
     private func extractToken(from request: inout Request) async throws -> String? {
         // Header first — simplest, and the only valid source for JSON,
         // HTMX, fetch, XHR, and multipart.
@@ -138,44 +142,26 @@ public struct CSRFMiddleware<Context: CSRFProtectedContext>: RouterMiddleware {
 
         // Only try the body when it's form-urlencoded.
         let contentType = request.headers[.contentType] ?? ""
-        guard contentType.lowercased()
-            .hasPrefix("application/x-www-form-urlencoded")
+        guard contentType.hasCaseInsensitiveASCIIPrefix("application/x-www-form-urlencoded")
         else {
             return nil
         }
 
         let buffer = try await request.collectBody(upTo: maxFormBodySize)
         let formString = String(buffer: buffer)
-        return parseFormField(
-            Self.formFieldName, from: formString
-        )
+        return extractCSRFField(from: formString)
     }
 
-    /// Very small URL-encoded form parser that returns the first match
-    /// for a given field name. Percent-decodes both sides.
-    private func parseFormField(_ name: String, from formString: String) -> String? {
-        for pair in formString.split(separator: "&") {
-            let parts = pair.split(separator: "=", maxSplits: 1)
-            guard parts.count == 2 else { continue }
-            let rawKey = String(parts[0])
-            let rawValue = String(parts[1])
-            let key = rawKey
-                .replacingOccurrences(of: "+", with: " ")
-                .removingPercentEncoding ?? rawKey
-            if key == name {
-                let value = rawValue
-                    .replacingOccurrences(of: "+", with: " ")
-                    .removingPercentEncoding ?? rawValue
-                return value
-            }
-        }
-        return nil
+    /// Decode the `csrf_token` field out of a URL-encoded form body
+    /// using Hummingbird's decoder. Returns `nil` if the field is absent
+    /// or the body is malformed.
+    private func extractCSRFField(from formString: String) -> String? {
+        (try? URLEncodedFormDecoder().decode(CSRFEnvelope.self, from: formString))?.csrf_token
     }
 
-    /// Constant-time string compare. Prevents timing attacks on token
-    /// comparison. Both strings are converted to `Data` and fed through
-    /// `HashedAuthenticationCode`-style comparison via
-    /// `swift-crypto`'s `SymmetricKey`-agnostic primitive.
+    /// Constant-time byte comparison — XOR-accumulate to avoid early-exit
+    /// timing leaks that a plain `==` comparison would leak via branch
+    /// timing on the first differing byte.
     private func constantTimeEquals(_ a: String, _ b: String) -> Bool {
         let aView = a.utf8
         let bView = b.utf8
@@ -185,6 +171,30 @@ public struct CSRFMiddleware<Context: CSRFProtectedContext>: RouterMiddleware {
             diff |= byteA ^ byteB
         }
         return diff == 0
+    }
+}
+
+// MARK: - String helpers
+
+extension String {
+    /// Case-insensitive (ASCII) prefix check that avoids allocating a
+    /// full lowercased copy of the receiver. Compares only as many
+    /// bytes as `prefix.utf8.count`. Intended for header inspection in
+    /// hot paths where callers previously used `lowercased().hasPrefix(…)`.
+    fileprivate func hasCaseInsensitiveASCIIPrefix(_ prefix: String) -> Bool {
+        let selfBytes = self.utf8
+        let prefixBytes = prefix.utf8
+        if selfBytes.count < prefixBytes.count { return false }
+        for (a, b) in zip(selfBytes, prefixBytes) {
+            // Lowercase ASCII A–Z → a–z by setting bit 0x20. Non-letters
+            // are passed through unchanged, which is fine for the small
+            // set of tokens we compare ("bearer ",
+            // "application/x-www-form-urlencoded").
+            let lowerA = (a >= 0x41 && a <= 0x5A) ? a | 0x20 : a
+            let lowerB = (b >= 0x41 && b <= 0x5A) ? b | 0x20 : b
+            if lowerA != lowerB { return false }
+        }
+        return true
     }
 }
 

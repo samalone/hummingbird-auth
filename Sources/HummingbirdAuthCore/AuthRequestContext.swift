@@ -61,7 +61,7 @@ extension AuthRequestContextProtocol {
 ///
 /// ### Implementing the conformance
 ///
-/// Add two stored properties to your app's context struct:
+/// Add the CSRF stored properties to your app's context struct:
 ///
 /// ```swift
 /// struct AppContext: CSRFProtectedContext {
@@ -72,7 +72,6 @@ extension AuthRequestContextProtocol {
 ///     var masqueradingAs: String?
 ///     var realUserID: UUID?
 ///     var csrfToken: String?
-///     var csrfValidated: Bool = false
 ///     var csrfSkipped: Bool = false
 ///
 ///     init(source: ApplicationRequestContextSource) {
@@ -81,16 +80,9 @@ extension AuthRequestContextProtocol {
 /// }
 /// ```
 ///
-/// The `CSRFMiddleware` sets `csrfValidated = true` after a successful
-/// validation (or legitimate skip for safe methods, bearer-auth, or
-/// unauthenticated requests). The `SkipCSRF` middleware sets
-/// `csrfSkipped = true` so `CSRFMiddleware` honors the opt-out.
+/// The `SkipCSRF` middleware sets `csrfSkipped = true` so `CSRFMiddleware`
+/// honors the opt-out.
 public protocol CSRFProtectedContext: AuthRequestContextProtocol {
-    /// Set to `true` by `CSRFMiddleware` after a successful check or a
-    /// legitimate skip (safe method, bearer-auth, unauthenticated, or opted
-    /// out via `SkipCSRF`).
-    var csrfValidated: Bool { get set }
-
     /// Opt-out flag set by the `SkipCSRF` middleware. `CSRFMiddleware`
     /// honors this and skips validation for routes that genuinely don't
     /// need it (webhooks, metrics endpoints, etc.). Use sparingly.
