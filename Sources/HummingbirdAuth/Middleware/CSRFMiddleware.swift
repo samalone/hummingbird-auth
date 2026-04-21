@@ -177,12 +177,12 @@ public struct CSRFMiddleware<Context: CSRFProtectedContext>: RouterMiddleware {
     /// `HashedAuthenticationCode`-style comparison via
     /// `swift-crypto`'s `SymmetricKey`-agnostic primitive.
     private func constantTimeEquals(_ a: String, _ b: String) -> Bool {
-        let aBytes = Array(a.utf8)
-        let bBytes = Array(b.utf8)
-        if aBytes.count != bBytes.count { return false }
+        let aView = a.utf8
+        let bView = b.utf8
+        if aView.count != bView.count { return false }
         var diff: UInt8 = 0
-        for i in 0..<aBytes.count {
-            diff |= aBytes[i] ^ bBytes[i]
+        for (byteA, byteB) in zip(aView, bView) {
+            diff |= byteA ^ byteB
         }
         return diff == 0
     }

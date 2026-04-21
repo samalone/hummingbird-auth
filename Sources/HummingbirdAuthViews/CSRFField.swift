@@ -1,3 +1,4 @@
+import Foundation
 import Plot
 
 /// Embeddable hidden CSRF form field.
@@ -54,12 +55,9 @@ public struct CSRFField: Component {
 /// state-changing, cookie-authenticated request.
 public func hxCSRFHeaders(_ csrfToken: String?) -> String {
     guard let csrfToken else { return "{}" }
-    // Minimal JSON-escape: escape " and \ which are the only legal
-    // characters in the token that would break the JSON string. Session
-    // CSRF tokens are hex-encoded, so in practice neither appears, but
-    // the escape is cheap and future-proofs against format changes.
-    let escaped = csrfToken
-        .replacingOccurrences(of: "\\", with: "\\\\")
-        .replacingOccurrences(of: "\"", with: "\\\"")
-    return "{\"X-CSRF-Token\":\"\(escaped)\"}"
+    guard let data = try? JSONSerialization.data(withJSONObject: ["X-CSRF-Token": csrfToken]),
+          let json = String(data: data, encoding: .utf8) else {
+        return "{}"
+    }
+    return json
 }
