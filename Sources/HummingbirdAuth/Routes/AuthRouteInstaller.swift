@@ -24,7 +24,7 @@ import WebAuthn
 /// ```swift
 /// installAuthRoutes(on: router, db: db, config: authConfig, logger: logger)
 /// ```
-public func installAuthRoutes<Context: AuthRequestContextProtocol>(
+public func installAuthRoutes<Context: CSRFProtectedContext>(
     on router: some RouterMethods<Context>,
     db: Database,
     config: AuthConfiguration<Context.User>,

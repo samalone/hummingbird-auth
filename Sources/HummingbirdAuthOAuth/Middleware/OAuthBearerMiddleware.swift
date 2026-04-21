@@ -4,8 +4,14 @@ import Hummingbird
 import HummingbirdAuth
 import HummingbirdAuthCore
 
-/// Protocol extending `AuthRequestContextProtocol` with OAuth-specific fields.
-public protocol OAuthRequestContextProtocol: AuthRequestContextProtocol {
+/// Protocol extending `CSRFProtectedContext` with OAuth-specific fields.
+///
+/// The CSRF refinement is inherited because `installOAuthRoutes` mounts
+/// state-changing endpoints (token exchange, dynamic registration,
+/// consent) that live under cookie authentication. Bearer-authenticated
+/// API traffic is exempt from CSRF by `CSRFMiddleware`'s bearer-auth skip
+/// condition.
+public protocol OAuthRequestContextProtocol: CSRFProtectedContext {
     var oauthScopes: Set<String> { get set }
     var oauthClientID: UUID? { get set }
 }

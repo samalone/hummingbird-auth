@@ -23,7 +23,7 @@ struct ProfileInput: Decodable {
 /// The `render` closure receives a `ProfileViewModel` and the request context,
 /// and should return a `ResponseGenerator` (typically an `HTML` page wrapping
 /// a `ProfileView` from HummingbirdAuthViews in your app's layout).
-public func installProfileRoutes<Context: AuthRequestContextProtocol, Page: ResponseGenerator>(
+public func installProfileRoutes<Context: CSRFProtectedContext, Page: ResponseGenerator>(
     on router: RouterGroup<AuthenticatedContext<Context>>,
     db: Database,
     render: @escaping @Sendable (ProfileViewModel, AuthenticatedContext<Context>) -> Page

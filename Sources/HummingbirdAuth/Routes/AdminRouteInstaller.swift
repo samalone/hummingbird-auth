@@ -66,7 +66,7 @@ public struct AdminRouteConfiguration: Sendable {
 /// Validation-failure paths (e.g. "At least one admin must remain") keep
 /// the existing flash-and-redirect behavior regardless of HTMX.
 public func installAdminRoutes<
-    Context: AuthRequestContextProtocol,
+    Context: CSRFProtectedContext,
     UsersPage: ResponseGenerator,
     InvitationsPage: ResponseGenerator,
     UserRowFragment: ResponseGenerator,
@@ -90,7 +90,7 @@ public func installAdminRoutes<
 
 /// Overload for callers that do not supply HTMX fragment renderers.
 public func installAdminRoutes<
-    Context: AuthRequestContextProtocol,
+    Context: CSRFProtectedContext,
     UsersPage: ResponseGenerator,
     InvitationsPage: ResponseGenerator
 >(
@@ -112,7 +112,7 @@ public func installAdminRoutes<
 
 /// Shared implementation of `installAdminRoutes`.
 private func installAdminRoutesImpl<
-    Context: AuthRequestContextProtocol,
+    Context: CSRFProtectedContext,
     UsersPage: ResponseGenerator,
     InvitationsPage: ResponseGenerator,
     UserRowFragment: ResponseGenerator,
