@@ -60,7 +60,6 @@ struct AppContext: CSRFProtectedContext, RequestContext {
     var masqueradingAs: String?
     var realUserID: UUID?
     var csrfToken: String?
-    var csrfValidated: Bool = false
     var csrfSkipped: Bool = false
 
     init(source: ApplicationRequestContextSource) {
@@ -182,7 +181,7 @@ installAdminRoutes(
 
 The library enforces CSRF protection by default via `CSRFMiddleware`. Every state-changing, cookie-authenticated request must echo the session's `csrfToken` back — either as a `csrf_token` form field or as an `X-CSRF-Token` HTTP header. Mismatches are rejected with a `403 Forbidden`.
 
-The route installers (`installAuthRoutes`, `installAdminRoutes`, `installProfileRoutes`, `installOAuthRoutes`) constrain their context parameter to `CSRFProtectedContext`. Apps that don't install `CSRFMiddleware` — or don't conform their context — get a compile error rather than a silently-insecure default.
+The route installers require a `CSRFProtectedContext` — directly for `installAuthRoutes`, `installAdminRoutes`, and `installProfileRoutes`, and transitively via `OAuthRequestContextProtocol` (which refines `CSRFProtectedContext`) for `installOAuthRoutes`. Apps that don't install `CSRFMiddleware` — or don't conform their context — get a compile error rather than a silently-insecure default.
 
 ### Installing the middleware
 
@@ -205,7 +204,7 @@ router.add(middleware: CSRFMiddleware<AppContext>())
 
 ### Where to read the token
 
-- `application/x-www-form-urlencoded` → the middleware reads `csrf_token` from the collected form body and re-attaches the body so the downstream handler can decode it normally.
+- `application/x-www-form-urlencoded` → the middleware reads `csrf_token` from the collected form body. Hummingbird's `collectBody(upTo:)` buffers the body back onto the request so downstream handlers can decode it normally.
 - Any other content type (JSON, HTMX / fetch / XHR, `multipart/form-data`): the `X-CSRF-Token` header is the only accepted source. Multipart bodies are intentionally not parsed — apps uploading multipart data must set the header via the HTMX `hx-headers` attribute or a `fetch()` `headers` object.
 
 ### Embedding the token in forms
