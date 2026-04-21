@@ -51,7 +51,7 @@ The library does not own the User table. Your app creates it and conforms the mo
 import Hummingbird
 import HummingbirdAuth
 
-struct AppContext: AuthRequestContextProtocol, RequestContext {
+struct AppContext: CSRFProtectedContext, RequestContext {
     typealias User = AppUser
 
     var coreContext: CoreRequestContextStorage
@@ -60,12 +60,18 @@ struct AppContext: AuthRequestContextProtocol, RequestContext {
     var masqueradingAs: String?
     var realUserID: UUID?
     var csrfToken: String?
+    var csrfValidated: Bool = false
+    var csrfSkipped: Bool = false
 
     init(source: ApplicationRequestContextSource) {
         self.coreContext = .init(source: source)
     }
 }
 ```
+
+Conforming to `CSRFProtectedContext` (a marker refinement of
+`AuthRequestContextProtocol`) is required by all the route installers —
+see [CSRF Protection](#csrf-protection) below.
 
 ### 3. Register migrations
 
@@ -96,6 +102,7 @@ let authConfig = AuthConfiguration<AppUser>(
 
 // Middleware
 router.add(middleware: SessionMiddleware<AppContext>(db: db, config: authConfig.session))
+router.add(middleware: CSRFMiddleware<AppContext>())
 router.add(middleware: AuthRedirectMiddleware<AppContext>(loginPath: "/login"))
 
 // Auth ceremony routes (POST /auth/begin-login, /auth/finish-login, etc.)
@@ -173,22 +180,69 @@ installAdminRoutes(
 
 ## CSRF Protection
 
-All form POST endpoints (profile update, admin role changes, masquerade, invitation management) validate a per-session CSRF token. Pass `csrfToken` from the context to the view components so they can include it as a hidden form field:
+The library enforces CSRF protection by default via `CSRFMiddleware`. Every state-changing, cookie-authenticated request must echo the session's `csrfToken` back — either as a `csrf_token` form field or as an `X-CSRF-Token` HTTP header. Mismatches are rejected with a `403 Forbidden`.
+
+The route installers (`installAuthRoutes`, `installAdminRoutes`, `installProfileRoutes`, `installOAuthRoutes`) constrain their context parameter to `CSRFProtectedContext`. Apps that don't install `CSRFMiddleware` — or don't conform their context — get a compile error rather than a silently-insecure default.
+
+### Installing the middleware
+
+Add `CSRFMiddleware` after `SessionMiddleware` (and, if you use the OAuth layer, after `OAuthBearerMiddleware`):
 
 ```swift
-ProfileView(viewModel: vm)                  // csrfToken is in the view model
-AdminUsersView(users: users, csrfToken: ctx.csrfToken)
-AdminInvitationsView(invitations: invs, baseURL: url, csrfToken: ctx.csrfToken)
+router.add(middleware: SessionMiddleware<AppContext>(db: db))
+router.add(middleware: OAuthBearerMiddleware<AppContext>(oauthService: oauth))  // if using OAuth
+router.add(middleware: CSRFMiddleware<AppContext>())
 ```
 
-If your app renders its own "end masquerade" button, include the token as a hidden field:
+### Skip conditions
 
-```html
-<form method="POST" action="/admin/masquerade/end">
-    <input type="hidden" name="csrf_token" value="{{csrfToken}}">
-    <button type="submit">End Masquerade</button>
-</form>
+`CSRFMiddleware` intentionally does nothing for requests that have nothing to forge against:
+
+- Safe methods (`GET`, `HEAD`, `OPTIONS`).
+- Requests that arrive with an `Authorization: Bearer …` header (bearer-token authentication is immune to CSRF by construction).
+- Requests with no session cookie (unauthenticated — nothing to forge against).
+- Requests explicitly opted out via `SkipCSRF` (see [Opting out](#opting-out) below).
+
+### Where to read the token
+
+- `application/x-www-form-urlencoded` → the middleware reads `csrf_token` from the collected form body and re-attaches the body so the downstream handler can decode it normally.
+- Any other content type (JSON, HTMX / fetch / XHR, `multipart/form-data`): the `X-CSRF-Token` header is the only accepted source. Multipart bodies are intentionally not parsed — apps uploading multipart data must set the header via the HTMX `hx-headers` attribute or a `fetch()` `headers` object.
+
+### Embedding the token in forms
+
+Use the `CSRFField` Plot component from `HummingbirdAuthViews` in every state-changing form:
+
+```swift
+import HummingbirdAuthViews
+
+Element(name: "form") {
+    CSRFField(context.csrfToken)
+    // … other inputs …
+}
+.attribute(named: "method", value: "POST")
+.attribute(named: "action", value: "/some/endpoint")
 ```
+
+For HTMX-driven mutations that don't carry a form body (`hx-post` / `hx-delete` / `hx-patch` with JSON), use the `hxCSRFHeaders` helper:
+
+```swift
+Element(name: "button") { Text("Delete") }
+    .attribute(named: "hx-delete", value: "/items/\(id)")
+    .attribute(named: "hx-headers", value: hxCSRFHeaders(context.csrfToken))
+```
+
+### Opting out
+
+Some routes genuinely don't need CSRF protection — for example external webhook receivers (which authenticate with a signature header, not a session cookie). Use `SkipCSRF`, but place it *outside* `CSRFMiddleware` so the flag is visible when the middleware checks it:
+
+```swift
+let webhooks = router.group("")
+    .add(middleware: SkipCSRF<AppContext>())
+    .add(middleware: CSRFMiddleware<AppContext>())
+webhooks.post("/webhooks/stripe") { request, context in /* … */ }
+```
+
+The simpler pattern is to install `CSRFMiddleware` on a group that covers your protected routes and leave webhook routes outside it entirely. `SkipCSRF` is only necessary when you must install `CSRFMiddleware` globally.
 
 ## Cookie Path Scoping
 
