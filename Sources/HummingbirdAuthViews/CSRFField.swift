@@ -1,4 +1,5 @@
 import Foundation
+import HummingbirdAuthCore
 import Plot
 
 /// Embeddable hidden CSRF form field.
@@ -30,7 +31,7 @@ public struct CSRFField: Component {
     public var body: Component {
         Node.input(
             .type(.hidden),
-            .name("csrf_token"),
+            .name(csrfFormFieldName),
             .value(csrfToken ?? "")
         )
     }
@@ -55,7 +56,7 @@ public struct CSRFField: Component {
 /// state-changing, cookie-authenticated request.
 public func hxCSRFHeaders(_ csrfToken: String?) -> String {
     guard let csrfToken else { return "{}" }
-    guard let data = try? JSONSerialization.data(withJSONObject: ["X-CSRF-Token": csrfToken]),
+    guard let data = try? JSONSerialization.data(withJSONObject: [csrfHeaderName: csrfToken]),
           let json = String(data: data, encoding: .utf8) else {
         return "{}"
     }
