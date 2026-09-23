@@ -8,5 +8,8 @@
       "Bash(swift build *)",
       "Bash(git *)"
     ]
+  },
+  "enabledPlugins": {
+    "personal-project@samalone-plugins": true
   }
 }
