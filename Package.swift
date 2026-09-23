@@ -16,7 +16,11 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/hummingbird-project/hummingbird.git", from: "2.0.0"),
         .package(url: "https://github.com/hummingbird-project/hummingbird-fluent.git", from: "2.0.0"),
-        .package(url: "https://github.com/swift-server/webauthn-swift.git", branch: "main"),
+        // Pinned to a revision, not a tag: this project needs the `Credential.aaguid`
+        // accessor from PR #119 and `AuthenticatorSelection` from PR #120, both merged
+        // after 1.0.0-beta.1 and not yet in any tagged release. Move to a versioned
+        // release once one includes those.
+        .package(url: "https://github.com/swift-server/webauthn-swift.git", revision: "b55c39fa6e1d3fdbd044a36f4a39ebf3a518ea70"),
         .package(url: "https://github.com/samalone/Plot.git", branch: "samalone/all-fixes"),
         .package(url: "https://github.com/samalone/plot-htmx.git", branch: "main"),
         .package(url: "https://github.com/vapor/fluent-sqlite-driver.git", from: "4.0.0"),

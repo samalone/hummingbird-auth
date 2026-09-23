@@ -1,5 +1,5 @@
 {
-  "originHash" : "412e692f3247024353f07dbbb162a9aa01a281af8e6691b316977982d4fdc79d",
+  "originHash" : "7c4a835ec5abac8c2f16f929568d502b5309d00eb31729d8cd02eba3a22ee3fe",
   "pins" : [
     {
       "identity" : "async-http-client",
@@ -312,7 +312,6 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/swift-server/webauthn-swift.git",
       "state" : {
-        "branch" : "main",
         "revision" : "b55c39fa6e1d3fdbd044a36f4a39ebf3a518ea70"
       }
     }
