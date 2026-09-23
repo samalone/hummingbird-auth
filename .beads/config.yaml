@@ -73,5 +73,5 @@
 
 sync.remote: "git+https://github.com/samalone/hummingbird-auth.git"
 export.auto: false
-dolt.auto-push: false
 backup.git-push: false
+dolt.auto-push: false
