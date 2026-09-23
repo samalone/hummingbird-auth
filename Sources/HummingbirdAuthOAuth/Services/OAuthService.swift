@@ -12,6 +12,10 @@ public enum OAuthError: Error, Sendable {
     case unauthorizedClient
     case unsupportedGrantType
     case invalidRequest(String)
+    /// RFC 7591 §3.2.2: a client metadata field is missing or invalid.
+    case invalidClientMetadata(String)
+    /// RFC 7591 §3.2.2: a registered redirect URI is missing or invalid.
+    case invalidRedirectURI(String)
 
     public var errorCode: String {
         switch self {
@@ -21,6 +25,8 @@ public enum OAuthError: Error, Sendable {
         case .unauthorizedClient: "unauthorized_client"
         case .unsupportedGrantType: "unsupported_grant_type"
         case .invalidRequest: "invalid_request"
+        case .invalidClientMetadata: "invalid_client_metadata"
+        case .invalidRedirectURI: "invalid_redirect_uri"
         }
     }
 
@@ -32,6 +38,8 @@ public enum OAuthError: Error, Sendable {
         case .unauthorizedClient: "The client is not authorized for this grant type"
         case .unsupportedGrantType: "The authorization grant type is not supported"
         case .invalidRequest(let detail): "Invalid request: \(detail)"
+        case .invalidClientMetadata(let detail): "Invalid client metadata: \(detail)"
+        case .invalidRedirectURI(let detail): "Invalid redirect_uri: \(detail)"
         }
     }
 }
@@ -293,20 +301,20 @@ public struct OAuthService: Sendable {
         guard let url = URL(string: uri),
               let scheme = url.scheme?.lowercased(),
               let host = url.host?.lowercased() else {
-            throw OAuthError.invalidRequest("redirect_uri must be an absolute URL")
+            throw OAuthError.invalidRedirectURI("redirect_uri must be an absolute URL")
         }
 
         guard scheme == "https" || scheme == "http" else {
-            throw OAuthError.invalidRequest("redirect_uri must use http or https scheme")
+            throw OAuthError.invalidRedirectURI("redirect_uri must use http or https scheme")
         }
 
         let isLocalhost = host == "localhost" || host == "127.0.0.1" || host == "::1"
         if scheme == "http" && !isLocalhost {
-            throw OAuthError.invalidRequest("redirect_uri must use https (http allowed only for localhost)")
+            throw OAuthError.invalidRedirectURI("redirect_uri must use https (http allowed only for localhost)")
         }
 
         if uri.contains("#") {
-            throw OAuthError.invalidRequest("redirect_uri must not contain a fragment")
+            throw OAuthError.invalidRedirectURI("redirect_uri must not contain a fragment")
         }
     }
 

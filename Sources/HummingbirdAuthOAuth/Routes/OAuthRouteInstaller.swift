@@ -68,18 +68,22 @@ public func installOAuthRoutes<Context: OAuthRequestContextProtocol>(
     oauth.post("token") { request, context -> Response in
         let bodyBuffer = try await request.body.collect(upTo: 1024 * 1024)
 
-        // Accept both form-encoded and JSON
-        let body: TokenRequest
-        let contentType = request.headers[.contentType] ?? ""
-        if contentType.contains("application/json") {
-            body = try JSONDecoder().decode(TokenRequest.self, from: Data(bodyBuffer.readableBytesView))
-        } else {
-            // Parse URL-encoded form body
-            let formString = String(buffer: bodyBuffer)
-            body = parseTokenRequest(from: formString)
-        }
-
         do {
+            // Accept both form-encoded and JSON
+            let body: TokenRequest
+            let contentType = request.headers[.contentType] ?? ""
+            if contentType.contains("application/json") {
+                do {
+                    body = try JSONDecoder().decode(TokenRequest.self, from: Data(bodyBuffer.readableBytesView))
+                } catch is DecodingError {
+                    throw OAuthError.invalidRequest("malformed JSON body")
+                }
+            } else {
+                // Parse URL-encoded form body
+                let formString = String(buffer: bodyBuffer)
+                body = parseTokenRequest(from: formString)
+            }
+
             let token: OAuthToken
             switch body.grant_type {
             case "authorization_code":
@@ -121,17 +125,7 @@ public func installOAuthRoutes<Context: OAuthRequestContextProtocol>(
                 body: .init(byteBuffer: ByteBuffer(bytes: data))
             )
         } catch let error as OAuthError {
-            let status: HTTPResponse.Status = error.errorCode == "invalid_client" ? .unauthorized : .badRequest
-            let errorResponse = OAuthErrorResponse(
-                error: error.errorCode,
-                error_description: error.errorDescription
-            )
-            let data = try JSONEncoder().encode(errorResponse)
-            return Response(
-                status: status,
-                headers: [.contentType: "application/json"],
-                body: .init(byteBuffer: ByteBuffer(bytes: data))
-            )
+            return try oauthErrorResponse(error)
         }
     }
 }
@@ -181,33 +175,62 @@ private func handleClientRegistration(
     oauthService: OAuthService
 ) async throws -> Response {
     let bodyBuffer = try await request.body.collect(upTo: 1024 * 1024)
-    let body = try JSONDecoder().decode(ClientRegistrationRequest.self, from: Data(bodyBuffer.readableBytesView))
 
-    guard !body.client_name.trimmingCharacters(in: .whitespaces).isEmpty else {
-        throw HTTPError(.badRequest, message: "client_name is required")
+    do {
+        // An empty body, `{}`, non-JSON, or wrong-typed fields all surface as
+        // DecodingError, since client_name and redirect_uris are required.
+        let body: ClientRegistrationRequest
+        do {
+            body = try JSONDecoder().decode(ClientRegistrationRequest.self, from: Data(bodyBuffer.readableBytesView))
+        } catch is DecodingError {
+            throw OAuthError.invalidClientMetadata(
+                "request body must be a JSON object with client_name and redirect_uris"
+            )
+        }
+
+        guard !body.client_name.trimmingCharacters(in: .whitespaces).isEmpty else {
+            throw OAuthError.invalidClientMetadata("client_name is required")
+        }
+        guard !body.redirect_uris.isEmpty else {
+            throw OAuthError.invalidRedirectURI("redirect_uris is required")
+        }
+
+        let client = try await oauthService.registerClient(
+            name: body.client_name,
+            redirectURIs: body.redirect_uris,
+            grantTypes: body.grant_types,
+            scope: body.scope
+        )
+
+        let response = ClientRegistrationResponse(
+            client_id: client.clientID,
+            client_name: client.clientName,
+            redirect_uris: client.redirectURIList,
+            grant_types: client.grantTypeList,
+            scope: client.scope,
+            token_endpoint_auth_method: "none"
+        )
+        let data = try JSONEncoder().encode(response)
+        return Response(
+            status: .created,
+            headers: [.contentType: "application/json"],
+            body: .init(byteBuffer: ByteBuffer(bytes: data))
+        )
+    } catch let error as OAuthError {
+        return try oauthErrorResponse(error)
     }
-    guard !body.redirect_uris.isEmpty else {
-        throw HTTPError(.badRequest, message: "redirect_uris is required")
-    }
+}
 
-    let client = try await oauthService.registerClient(
-        name: body.client_name,
-        redirectURIs: body.redirect_uris,
-        grantTypes: body.grant_types,
-        scope: body.scope
+/// Render an `OAuthError` as the JSON error object of RFC 6749 §5.2 / RFC 7591 §3.2.2.
+private func oauthErrorResponse(_ error: OAuthError) throws -> Response {
+    let status: HTTPResponse.Status = error.errorCode == "invalid_client" ? .unauthorized : .badRequest
+    let errorResponse = OAuthErrorResponse(
+        error: error.errorCode,
+        error_description: error.errorDescription
     )
-
-    let response = ClientRegistrationResponse(
-        client_id: client.clientID,
-        client_name: client.clientName,
-        redirect_uris: client.redirectURIList,
-        grant_types: client.grantTypeList,
-        scope: client.scope,
-        token_endpoint_auth_method: "none"
-    )
-    let data = try JSONEncoder().encode(response)
+    let data = try JSONEncoder().encode(errorResponse)
     return Response(
-        status: .created,
+        status: status,
         headers: [.contentType: "application/json"],
         body: .init(byteBuffer: ByteBuffer(bytes: data))
     )

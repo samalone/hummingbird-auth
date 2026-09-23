@@ -77,6 +77,7 @@ let package = Package(
             dependencies: [
                 "HummingbirdAuth",
                 "HummingbirdAuthCore",
+                "HummingbirdAuthOAuth",
                 "HummingbirdAuthViews",
                 .product(name: "FluentSQLiteDriver", package: "fluent-sqlite-driver"),
                 .product(name: "HummingbirdTesting", package: "hummingbird"),
