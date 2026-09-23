@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "hummingbird_auth",
+  "project_id": "7638318b-7af6-4b17-bbce-f9d202167dc7"
+}
